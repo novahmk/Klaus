@@ -4,5 +4,20 @@
  */
 
 export * from './components/1-deteccao-intencao';
+export * from './integrations/wasender';
 
-console.log('Klaus V2 - Componente 1 (Detecção de Intenção) carregado');
+import { QueueManager } from './components/8-filas/queue-manager';
+import { logger } from './components/shared/logger';
+import {
+	configurarProcessor,
+	iniciarServidor,
+	wasenderConfig
+} from './integrations/wasender';
+
+if (wasenderConfig.PROCESSING_MODE === 'queue') {
+	configurarProcessor({ queueManager: QueueManager.getInstance() });
+} else {
+	logger.warn('PROCESSING_MODE=direct requer OrquestradorKlaus configurado');
+}
+
+iniciarServidor();
