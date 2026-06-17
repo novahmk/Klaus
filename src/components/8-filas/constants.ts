@@ -28,9 +28,32 @@ export const DEFAULT_QUEUE_CONFIG: Record<QueueName, QueueConfig> = {
   }
 };
 
-export const REDIS_CONNECTION_CONFIG = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false
-};
+function criarRedisConnectionConfig() {
+  const baseConfig = {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+  };
+
+  if (!process.env.REDIS_URL) {
+    return {
+      ...baseConfig,
+      host: process.env.REDIS_HOST || 'localhost',
+      port: Number(process.env.REDIS_PORT) || 6379
+    };
+  }
+
+  const redisUrl = new URL(process.env.REDIS_URL);
+  const db = redisUrl.pathname.replace('/', '');
+
+  return {
+    ...baseConfig,
+    host: redisUrl.hostname,
+    port: Number(redisUrl.port) || 6379,
+    username: redisUrl.username || undefined,
+    password: redisUrl.password || undefined,
+    db: db ? Number(db) : 0,
+    tls: redisUrl.protocol === 'rediss:' ? {} : undefined
+  };
+}
+
+export const REDIS_CONNECTION_CONFIG = criarRedisConnectionConfig();
