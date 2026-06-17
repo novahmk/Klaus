@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+yarn.lock
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pino-pretty.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Runtime
+.node_repl_history
+
+# Cache
+.eslintcache
+.cache/
