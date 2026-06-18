@@ -1,11 +1,9 @@
 // src/infra/database/migrate.ts
 import { readdirSync, readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { getPool, fechar } from './pool';
 import { logger } from '../../components/shared/logger';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
 
 /**
@@ -70,7 +68,7 @@ export async function migrar(): Promise<string[]> {
 }
 
 // Execução direta: npm run migrate
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (require.main === module) {
   (async () => {
     try {
       const aplicadas = await migrar();

@@ -3,9 +3,8 @@
   "version": "2.0.0",
   "description": "Klaus V2 - AI-powered Sales Development Representative",
   "main": "dist/index.js",
-  "type": "module",
   "scripts": {
-    "dev": "ts-node --esm src/index.ts",
+    "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
     "build": "tsc && npm run copy:migrations",
     "copy:migrations": "mkdir -p dist/infra/database/migrations && cp src/infra/database/migrations/*.sql dist/infra/database/migrations/",
@@ -13,7 +12,7 @@
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
-    "migrate": "ts-node --esm src/infra/database/migrate.ts",
+    "migrate": "ts-node src/infra/database/migrate.ts",
     "migrate:prod": "node dist/infra/database/migrate.js"
   },
   "keywords": [
