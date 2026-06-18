@@ -2,8 +2,8 @@
 import { readdirSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { getPool, fechar } from './pool';
-import { logger } from '../../components/shared/logger';
+import { getPool, fechar } from './pool.js';
+import { logger } from '../../components/shared/logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
