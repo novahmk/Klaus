@@ -26,10 +26,11 @@ import {
   gerarTemplateAlternativo
 } from './prompts';
 import { logger } from '../shared/logger';
+import { OpenAIClient } from '../../integrations/openai';
 
 export class GeradorPerguntas {
   private cache: GerenciadorCachePergunta;
-  private openaiClient: any;
+  private openaiClient: OpenAIClient | null = null;
   private config: GeradorConfig;
 
   constructor(config: GeradorConfig = {}) {
@@ -50,8 +51,7 @@ export class GeradorPerguntas {
     // Inicializar OpenAI (lazy load)
     if (this.config.enableGpt && config.openaiApiKey) {
       try {
-        const OpenAI = require('openai');
-        this.openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+        this.openaiClient = new OpenAIClient(config.openaiApiKey);
         logger.info('OpenAI cliente inicializado');
       } catch (erro) {
         logger.warn({ erro: String(erro) }, 'OpenAI não disponível - usando fallback');
@@ -200,17 +200,17 @@ export class GeradorPerguntas {
 
       logger.debug('Enviando requisição para GPT');
 
-      const resposta = await this.openaiClient.chat.completions.create({
+      if (!this.openaiClient) return null;
+
+      const conteudoResposta = await this.openaiClient.chat({
         model: GPT_MODEL,
         messages: [
           { role: 'system', content: promptSistema },
           { role: 'user', content: promptUsuario }
         ],
         temperature: GPT_TEMPERATURE,
-        max_tokens: GPT_MAX_TOKENS
+        maxTokens: GPT_MAX_TOKENS
       });
-
-      const conteudoResposta = resposta.choices[0]?.message?.content;
 
       if (!conteudoResposta) {
         logger.warn('GPT retornou resposta vazia');

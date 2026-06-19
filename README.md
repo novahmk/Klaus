@@ -100,6 +100,58 @@ npm run lint
 npm run type-check
 ```
 
+### Deploy no Railway
+
+O projeto já está compatível com Railway usando Dockerfile.
+
+1. Crie um novo projeto no Railway e conecte este repositório.
+2. No serviço da aplicação, use o Dockerfile da raiz do projeto.
+3. Provisione PostgreSQL e Redis no mesmo projeto Railway.
+4. Configure as variáveis de ambiente abaixo no serviço da aplicação.
+5. Configure healthcheck em `/health`.
+6. Faça deploy e valide os endpoints `/` e `/health`.
+
+Variáveis mínimas para produção:
+
+```bash
+PORT=8080
+NODE_ENV=production
+PROCESSING_MODE=queue
+
+OPENAI_API_KEY=<secret>
+OPENAI_MODEL_EMBEDDING=text-embedding-3-small
+OPENAI_MODEL_CHAT=gpt-4o-mini
+OPENAI_TEMPERATURE=0.7
+
+DATABASE_URL=<provisionado pelo Railway>
+REDIS_URL=<provisionado pelo Railway>
+
+WASENDERAPI_TOKEN=<secret>
+WASENDERAPI_BASE_URL=https://www.wasenderapi.com/api
+WASENDERAPI_WEBHOOK_SECRET=<secret>
+DEFAULT_CLIENTE_ID=default
+LOG_LEVEL=info
+```
+
+Após o primeiro deploy, execute migrations no ambiente:
+
+```bash
+npm run migrate:prod
+```
+
+Checklist operacional rápido:
+
+```bash
+# build local (opcional, antes do push)
+npm run build
+
+# checagens mínimas
+npm run type-check
+npx vitest run src/integrations/openai/client.test.ts
+```
+
+Runbook detalhado: ver `RAILWAY_DEPLOY.md`.
+
 ### Uso Básico (Componente 1)
 
 ```typescript

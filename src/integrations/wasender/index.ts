@@ -21,6 +21,7 @@ export {
   configurarProcessor,
   processarMensagem
 } from './processor';
+export { criarOrquestradorWasender } from './bootstrap';
 export type {
   MensagemRecebida,
   OrquestradorLike,

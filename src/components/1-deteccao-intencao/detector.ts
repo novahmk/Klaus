@@ -10,10 +10,11 @@ import { ValidadorIntencao } from './validator';
 import { gerarPromptSistema, gerarPromptUsuario } from './prompts';
 import { CONFIDENCE_MULTIPLIERS } from './constants';
 import { logger } from '../shared/logger';
+import { OpenAIClient } from '../../integrations/openai';
 
 export class DetectorIntencao {
   private cache: GerenciadorCache;
-  private openaiClient: any;
+  private openaiClient: OpenAIClient | null = null;
   private config: DetectorConfig;
 
   constructor(config: DetectorConfig = {}) {
@@ -33,8 +34,7 @@ export class DetectorIntencao {
     // Inicializar OpenAI (lazy load)
     if (this.config.enableGpt && config.openaiApiKey) {
       try {
-        const OpenAI = require('openai');
-        this.openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+        this.openaiClient = new OpenAIClient(config.openaiApiKey);
         logger.info('OpenAI cliente inicializado');
       } catch (erro) {
         logger.warn({ erro: String(erro) }, 'OpenAI não disponível - usando fallback');
@@ -160,6 +160,8 @@ export class DetectorIntencao {
    */
   private async detectarComGpt(input: DetectorInput): Promise<DeteccaoIntencaoResult | null> {
     try {
+      if (!this.openaiClient) return null;
+
       const promptSistema = gerarPromptSistema();
       const promptUsuario = gerarPromptUsuario(
         input.mensagem,
@@ -172,17 +174,14 @@ export class DetectorIntencao {
 
       logger.debug('Enviando requisição para GPT');
 
-      const resposta = await this.openaiClient.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+      const conteudoResposta = await this.openaiClient.chat({
         messages: [
           { role: 'system', content: promptSistema },
           { role: 'user', content: promptUsuario }
         ],
         temperature: 0.3,
-        max_tokens: 500
+        maxTokens: 500
       });
-
-      const conteudoResposta = resposta.choices[0]?.message?.content;
 
       if (!conteudoResposta) {
         logger.warn('GPT retornou resposta vazia');

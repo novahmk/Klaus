@@ -49,7 +49,13 @@ export class OrquestradorKlaus {
         ['TEM_OBJECAO', 'QUER_MAIS_INFO'].includes(intencao.intencao)
       ) {
         estado = EstadoConversa.BUSCANDO_CONHECIMENTO;
-        contextoAdicional = await this.comp3_Busca.buscar(mensagem.texto);
+        contextoAdicional = await this.comp3_Busca.buscar({
+          texto: mensagem.texto,
+          intencao: intencao.intencao,
+          leadId: mensagem.leadId,
+          clienteId: mensagem.clienteId,
+          metadata: mensagem.metadata
+        });
       }
 
       // 4. Geração de Resposta (Componente 5)
@@ -57,22 +63,31 @@ export class OrquestradorKlaus {
       const respostaFinal = await this.comp5_Gerador.gerar({
         mensagem: mensagem.texto,
         intencao: intencao.intencao,
-        contexto: contextoAdicional
+        contexto: contextoAdicional,
+        leadId: mensagem.leadId,
+        clienteId: mensagem.clienteId,
+        metadata: mensagem.metadata
       });
 
       // 5. Qualificação (Componente 6)
       estado = EstadoConversa.QUALIFICANDO_LEAD;
-      const qualificacao = await this.comp6_Qualificador.analisar(
-        mensagem.leadId
-      );
+      const qualificacao = await this.comp6_Qualificador.analisar({
+        leadId: mensagem.leadId,
+        clienteId: mensagem.clienteId,
+        texto: mensagem.texto,
+        intencao: intencao.intencao,
+        metadata: mensagem.metadata
+      });
+      const scoreQualificacao =
+        qualificacao.score ?? qualificacao.scoreQualificacao ?? 0;
 
       const resultado: RespostaKlaus = {
         texto: respostaFinal,
         intencaoDetectada: intencao.intencao,
         confianca: intencao.confianca,
-        scoreQualificacao: qualificacao.score,
+        scoreQualificacao,
         sugerirAgendamento:
-          intencao.intencao === 'QUER_AGENDAR' || qualificacao.score > 80,
+          intencao.intencao === 'QUER_AGENDAR' || scoreQualificacao > 80,
         metadata: {
           tempoProcessamento: Date.now() - startTime,
           tokensUsados: 0, // Calculado pelos componentes
