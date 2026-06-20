@@ -3,18 +3,22 @@ import { JobProcessor } from './job-processor';
 import { QueueName, KlausJobPayload } from './types';
 
 const mocks = vi.hoisted(() => ({
-  enviarMensagem: vi.fn(() => Promise.resolve({ ok: true })),
-  salvarMensagem: vi.fn(() => Promise.resolve()),
+  dispatchOutboundMessage: vi.fn(() =>
+    Promise.resolve({
+      sent: true,
+      deduplicated: false,
+      idempotencyKey: 'outbound:idempotency:test'
+    })
+  ),
   registrarEtapa: vi.fn(() => Promise.resolve())
 }));
 
-vi.mock('../../integrations/wasender/client', () => ({
-  enviarMensagem: mocks.enviarMensagem
+vi.mock('../../infra/memory', () => ({
+  registrarEtapa: mocks.registrarEtapa
 }));
 
-vi.mock('../../infra/memory', () => ({
-  salvarMensagem: mocks.salvarMensagem,
-  registrarEtapa: mocks.registrarEtapa
+vi.mock('../../modules/outbound/dispatcher', () => ({
+  dispatchOutboundMessage: mocks.dispatchOutboundMessage
 }));
 
 describe('JobProcessor - WASender outbound', () => {
@@ -106,14 +110,14 @@ describe('JobProcessor - WASender outbound', () => {
       data: payload
     });
 
-    expect(mocks.enviarMensagem).toHaveBeenCalledWith(
-      '+5511999998888',
-      'Resposta enviada'
-    );
-    expect(mocks.salvarMensagem).toHaveBeenCalledWith(
-      '5511999998888',
-      'assistant',
-      'Resposta enviada'
+    expect(mocks.dispatchOutboundMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leadId: '5511999998888',
+        clienteId: 'cliente-1',
+        mensagem: 'Resposta enviada',
+        to: '+5511999998888',
+        origem: 'queue_outbound'
+      })
     );
     expect(resultado).toEqual(
       expect.objectContaining({

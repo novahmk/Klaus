@@ -5,8 +5,8 @@ import { REDIS_CONNECTION_CONFIG, DEFAULT_QUEUE_CONFIG } from './constants';
 import { QueueManager } from './queue-manager';
 import { OrquestradorKlaus } from '../7-orquestracao/orchestrator';
 import { Intencao } from '../1-deteccao-intencao/types';
-import { enviarMensagem } from '../../integrations/wasender/client';
-import { salvarMensagem, registrarEtapa } from '../../infra/memory';
+import { registrarEtapa } from '../../infra/memory';
+import { dispatchOutboundMessage } from '../../modules/outbound/dispatcher';
 import { logger } from '../shared/logger';
 
 function messageIdDe(job: Job<KlausJobPayload>): string | undefined {
@@ -187,15 +187,15 @@ export class JobProcessor {
       job.data.leadId;
 
     try {
-      await enviarMensagem(to, job.data.mensagem);
-      await salvarMensagem(job.data.leadId, 'assistant', job.data.mensagem);
-      await registrarEtapa({
-        etapa: 'enviada',
-        messageId: messageIdDe(job),
-        correlationId: messageIdDe(job),
+      await dispatchOutboundMessage({
         leadId: job.data.leadId,
         clienteId: job.data.clienteId,
-        jobId: job.id
+        mensagem: job.data.mensagem,
+        to,
+        messageId: messageIdDe(job),
+        correlationId: messageIdDe(job),
+        jobId: job.id,
+        origem: 'queue_outbound'
       });
       logger.info(
         { leadId: job.data.leadId, to, jobId: job.id },

@@ -47,4 +47,29 @@ export class ComponenteQualificacao {
 
     return { scoreQualificacao: score, prioridade, estagio };
   }
+
+  async analisar(input: {
+    leadId: string;
+    clienteId: string;
+    texto: string;
+    intencao: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ score: number; scoreQualificacao: number }> {
+    const resultado = await this.executar({
+      leadId: input.leadId,
+      clienteId: input.clienteId,
+      intencao: input.intencao,
+      historico: [{ remetente: 'lead', texto: input.texto }],
+      contextoLead: {
+        nome: String(input.metadata?.pushName || 'Lead'),
+        telefone: String(input.metadata?.from || input.leadId),
+        email: String(input.metadata?.email || '')
+      }
+    });
+
+    return {
+      score: resultado.scoreQualificacao,
+      scoreQualificacao: resultado.scoreQualificacao
+    };
+  }
 }

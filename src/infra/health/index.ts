@@ -12,6 +12,9 @@ import {
 
 export function attach(expressApp: Express): void {
   expressApp.get(healthConfig.healthRoute, healthMiddleware(fullChecks));
+  expressApp.get('/health/ping', (_req, res) => {
+    res.status(200).json({ status: 'ok' });
+  });
 
   startPing(pingChecks, healthConfig.pingInterval);
 

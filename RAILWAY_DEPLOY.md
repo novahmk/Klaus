@@ -65,6 +65,34 @@ Verificar no endpoint /health:
 - status = ok
 - mode = queue
 
+Verificar endpoints de prospeccao (com INTERNAL_API_KEY configurada):
+
+```bash
+curl -sS -H "x-internal-api-key: $INTERNAL_API_KEY" \
+	"$APP_URL/api/prospeccao/contract"
+```
+
+```bash
+curl -sS -X POST -H "content-type: application/json" \
+	-H "x-internal-api-key: $INTERNAL_API_KEY" \
+	"$APP_URL/api/prospeccao/check-duplicados" \
+	-d '{"telefones":["11999998888"]}'
+```
+
+```bash
+curl -sS -X POST -H "content-type: application/json" \
+	-H "x-internal-api-key: $INTERNAL_API_KEY" \
+	"$APP_URL/api/prospeccao/importar-leads" \
+	-d '{"clienteId":"default","itens":[{"nome":"Teste","telefone":"11999998888"}]}'
+```
+
+```bash
+curl -sS -X POST -H "content-type: application/json" \
+	-H "x-internal-api-key: $INTERNAL_API_KEY" \
+	"$APP_URL/api/prospeccao/manual-disparos" \
+	-d '{"clienteId":"default","mensagem":"Ola!","itens":[{"telefone":"11999998888"}]}'
+```
+
 ## 6) Troubleshooting rapido
 
 Falha de healthcheck:
@@ -87,4 +115,5 @@ Falha OpenAI:
 
 - Nao commitar secrets no repositorio.
 - Usar apenas secrets do Railway para chaves de API.
+- Configurar INTERNAL_API_KEY para proteger endpoints internos de prospeccao.
 - Rotacionar imediatamente qualquer chave exposta.
