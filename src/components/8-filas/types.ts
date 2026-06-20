@@ -4,7 +4,8 @@ import { Intencao } from '../1-deteccao-intencao/types';
 export enum QueueName {
   INBOUND_MESSAGES = 'inbound_messages',
   OUTBOUND_RESPONSES = 'outbound_responses',
-  NOTIFICATION_ALERTS = 'notification_alerts'
+  NOTIFICATION_ALERTS = 'notification_alerts',
+  DEAD_LETTER = 'dead_letter'
 }
 
 export interface KlausJobPayload {

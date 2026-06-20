@@ -32,6 +32,19 @@ export interface QueueManagerLike {
   ): Promise<unknown>;
 }
 
+/**
+ * Resultado explícito do processamento, para o webhook decidir a marcação
+ * de idempotência somente após sucesso real (enqueue ou processamento direto).
+ */
+export interface ResultadoProcessamento {
+  /** true quando a mensagem foi enfileirada com sucesso (modo 'queue'). */
+  enfileirada: boolean;
+  /** Id do job criado na fila, quando disponível. */
+  jobId?: string;
+  /** Texto de resposta no modo 'direct' (null/undefined no modo 'queue'). */
+  resposta?: string | null;
+}
+
 let _orquestrador: OrquestradorLike | null = null;
 let _queueManager: QueueManagerLike | null = null;
 
@@ -54,11 +67,18 @@ export function configurarProcessor(deps: {
  */
 export async function processarMensagem(
   msg: MensagemRecebida
-): Promise<string | null> {
+): Promise<ResultadoProcessamento> {
   if (wasenderConfig.PROCESSING_MODE === 'queue') {
     if (!_queueManager) {
-      logger.warn('Processor: QueueManager não configurado — descartando');
-      return null;
+      // Nunca descartar silenciosamente: erro explícito impede que a
+      // mensagem seja marcada como processada e permite reprocessamento.
+      logger.error(
+        { leadId: msg.leadId, messageId: msg.messageId },
+        'Processor: QueueManager não configurado — mensagem não enfileirada'
+      );
+      throw new Error(
+        'QueueManager não inicializado — mensagem não enfileirada'
+      );
     }
     const payload: KlausJobPayload = {
       leadId: msg.leadId,
@@ -67,15 +87,28 @@ export async function processarMensagem(
       timestamp: new Date(),
       metadata: { from: msg.from, pushName: msg.pushName, messageId: msg.messageId }
     };
-    await _queueManager.addJob(QueueName.INBOUND_MESSAGES, payload, 0);
-    logger.info({ leadId: msg.leadId }, 'Processor: mensagem enfileirada (INBOUND)');
-    return null;
+    const job = (await _queueManager.addJob(
+      QueueName.INBOUND_MESSAGES,
+      payload,
+      0
+    )) as { id?: string } | undefined;
+    const jobId = job?.id;
+    logger.info(
+      { leadId: msg.leadId, messageId: msg.messageId, jobId },
+      'Processor: mensagem enfileirada (INBOUND)'
+    );
+    return { enfileirada: true, jobId, resposta: null };
   }
 
   // modo 'direct'
   if (!_orquestrador) {
-    logger.warn('Processor: Orquestrador não configurado — descartando');
-    return null;
+    logger.error(
+      { leadId: msg.leadId, messageId: msg.messageId },
+      'Processor: Orquestrador não configurado — mensagem não processada'
+    );
+    throw new Error(
+      'Orquestrador não inicializado — mensagem não processada'
+    );
   }
   const resultado = await _orquestrador.processar({
     id: msg.messageId,
@@ -84,5 +117,5 @@ export async function processarMensagem(
     clienteId: msg.clienteId,
     metadata: { from: msg.from, pushName: msg.pushName }
   });
-  return resultado.texto;
+  return { enfileirada: false, resposta: resultado.texto };
 }

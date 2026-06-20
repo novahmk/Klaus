@@ -7,6 +7,14 @@ export const CRITERIOS_VALIDACAO = {
   MAX_LENGTH: 500
 };
 
+/** Parâmetros de geração para conter respostas longas/verbosas. */
+export const GERACAO_CONFIG = {
+  // ~500–600 caracteres: trava física de tamanho na chamada da IA.
+  MAX_TOKENS: 200,
+  // Menor temperatura = respostas mais diretas e menos prolixas.
+  TEMPERATURE: 0.4
+};
+
 export const INSTRUCOES_TOM = {
   EXECUTIVO:
     'Foco em ROI, visão estratégica e resultados de alto nível. Linguagem direta.',

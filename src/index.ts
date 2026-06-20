@@ -22,14 +22,37 @@ attachGlobalHandlers();
 
 const orquestrador = criarOrquestradorWasender();
 
-if (wasenderConfig.PROCESSING_MODE === 'queue') {
-	const queueManager = QueueManager.getInstance();
-	configurarProcessor({ queueManager });
-	new JobProcessor(orquestrador, queueManager).start();
-	logger.info('Processor WASender configurado em modo queue');
-} else {
-	configurarProcessor({ orquestrador });
-	logger.info('Processor WASender configurado em modo direct');
+async function inicializar(): Promise<void> {
+	if (wasenderConfig.PROCESSING_MODE === 'queue') {
+		try {
+			const queueManager = QueueManager.getInstance();
+			// Verifica conectividade com Redis antes de comprometer o modo fila.
+			const pong = await queueManager.healthPing();
+			if (pong !== 'PONG') {
+				throw new Error(`Redis respondeu inesperado: ${pong}`);
+			}
+			configurarProcessor({ queueManager });
+			new JobProcessor(orquestrador, queueManager).start();
+			logger.info('Processor WASender configurado em modo queue');
+		} catch (erro) {
+			// Fallback de resiliência: se a fila/Redis estiver indisponível na
+			// inicialização, degrada para processamento direto em vez de derrubar
+			// todo o atendimento.
+			logger.error(
+				{ erro: (erro as Error).message },
+				'Fila indisponível na inicialização — fallback para modo direct'
+			);
+			// Alterna o modo efetivo para que o processor use o caminho direto.
+			wasenderConfig.PROCESSING_MODE = 'direct';
+			configurarProcessor({ orquestrador });
+			logger.warn('Processor WASender configurado em modo direct (fallback)');
+		}
+	} else {
+		configurarProcessor({ orquestrador });
+		logger.info('Processor WASender configurado em modo direct');
+	}
+
+	iniciarServidor();
 }
 
-iniciarServidor();
+void inicializar();

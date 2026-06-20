@@ -26,7 +26,9 @@ OBJEÇÃO DO LEAD: "${input.objecao}"
 REGRAS:
 1. Não invente dados. Use apenas a Base de Conhecimento.
 2. Seja empático mas focado no fechamento.
-3. Responda entre 150 e 500 caracteres.
+3. Responda em no máximo 2 a 3 frases curtas, sem listas e sem quebras de
+   parágrafo, totalizando entre 150 e 500 caracteres.
+4. Seja direto: nada de introduções longas ou repetições.
 `;
   }
 

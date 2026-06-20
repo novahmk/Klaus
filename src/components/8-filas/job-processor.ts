@@ -6,8 +6,13 @@ import { QueueManager } from './queue-manager';
 import { OrquestradorKlaus } from '../7-orquestracao/orchestrator';
 import { Intencao } from '../1-deteccao-intencao/types';
 import { enviarMensagem } from '../../integrations/wasender/client';
-import { salvarMensagem } from '../../infra/memory';
+import { salvarMensagem, registrarEtapa } from '../../infra/memory';
 import { logger } from '../shared/logger';
+
+function messageIdDe(job: Job<KlausJobPayload>): string | undefined {
+  const id = job.data.metadata?.messageId;
+  return typeof id === 'string' ? id : undefined;
+}
 
 export class JobProcessor {
   private workers: Map<QueueName, Worker> = new Map();
@@ -33,10 +38,66 @@ export class JobProcessor {
         console.error(
           `[JOB FAILED] ID: ${job?.id} na fila ${queueName}: ${err.message}`
         );
+        void this.handleFailedJob(queueName, job, err);
       });
 
       this.workers.set(queueName, worker);
     });
+  }
+
+  /**
+   * Em falha definitiva (tentativas esgotadas), encaminha o job para a
+   * Dead Letter Queue e registra a etapa de erro para auditoria.
+   */
+  private async handleFailedJob(
+    queueName: QueueName,
+    job: Job<KlausJobPayload> | undefined,
+    err: Error
+  ): Promise<void> {
+    if (!job) return;
+
+    const tentativas = job.attemptsMade ?? 0;
+    const maxTentativas =
+      job.opts?.attempts ?? DEFAULT_QUEUE_CONFIG[queueName].attempts;
+    const messageId = messageIdDe(job);
+
+    await registrarEtapa({
+      etapa: 'erro',
+      messageId,
+      correlationId: messageId,
+      leadId: job.data.leadId,
+      clienteId: job.data.clienteId,
+      jobId: job.id,
+      erroDetalhe: err.message
+    });
+
+    // Só envia para a DLQ quando as tentativas se esgotaram.
+    if (tentativas < maxTentativas) return;
+
+    try {
+      await this.queueManager.addJob(QueueName.DEAD_LETTER, {
+        leadId: job.data.leadId,
+        clienteId: job.data.clienteId,
+        mensagem: job.data.mensagem,
+        timestamp: new Date(),
+        metadata: {
+          ...job.data.metadata,
+          filaOrigem: queueName,
+          jobIdOrigem: job.id,
+          tentativas,
+          erro: err.message
+        }
+      });
+      logger.error(
+        { queueName, jobId: job.id, messageId, tentativas, erro: err.message },
+        'DLQ: job movido para dead_letter após esgotar tentativas'
+      );
+    } catch (dlqErr) {
+      logger.error(
+        { queueName, jobId: job.id, erro: (dlqErr as Error).message },
+        'DLQ: falha ao mover job para dead_letter'
+      );
+    }
   }
 
   private async processJob(
@@ -59,9 +120,19 @@ export class JobProcessor {
 
   private async processInbound(job: Job<KlausJobPayload>): Promise<JobResult> {
     const startTime = Date.now();
+    const messageId = messageIdDe(job);
     console.log(
       `[JOB START] Processando job ${job.id} para lead ${job.data.leadId}`
     );
+
+    await registrarEtapa({
+      etapa: 'processando_ia',
+      messageId,
+      correlationId: messageId,
+      leadId: job.data.leadId,
+      clienteId: job.data.clienteId,
+      jobId: job.id
+    });
 
     try {
       const resultado = await this.orquestrador.processar({
@@ -118,6 +189,14 @@ export class JobProcessor {
     try {
       await enviarMensagem(to, job.data.mensagem);
       await salvarMensagem(job.data.leadId, 'assistant', job.data.mensagem);
+      await registrarEtapa({
+        etapa: 'enviada',
+        messageId: messageIdDe(job),
+        correlationId: messageIdDe(job),
+        leadId: job.data.leadId,
+        clienteId: job.data.clienteId,
+        jobId: job.id
+      });
       logger.info(
         { leadId: job.data.leadId, to, jobId: job.id },
         'OUTBOUND: resposta enviada via WASenderAPI'

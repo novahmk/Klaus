@@ -149,7 +149,9 @@ describe('WASender - processor', () => {
     });
 
     expect(processar).toHaveBeenCalledOnce();
-    expect(resposta).toBe('resposta IA');
+    expect(resposta).toEqual(
+      expect.objectContaining({ enfileirada: false, resposta: 'resposta IA' })
+    );
   });
 
   it('modo queue deve enfileirar e retornar null', async () => {
@@ -170,6 +172,25 @@ describe('WASender - processor', () => {
     });
 
     expect(addJob).toHaveBeenCalledOnce();
-    expect(resposta).toBeNull();
+    expect(resposta).toEqual(
+      expect.objectContaining({ enfileirada: true, jobId: 'job-1' })
+    );
+  });
+
+  it('modo queue sem QueueManager deve lançar erro (não descartar)', async () => {
+    process.env.PROCESSING_MODE = 'queue';
+    vi.resetModules();
+    const { processarMensagem } = await import('./processor');
+
+    await expect(
+      processarMensagem({
+        from: '+5511999998888',
+        texto: 'oi',
+        pushName: 'João',
+        leadId: '5511999998888',
+        clienteId: 'cliente-1',
+        messageId: 'm1'
+      })
+    ).rejects.toThrow(/QueueManager não inicializado/);
   });
 });

@@ -15,7 +15,8 @@ import { processarMensagem } from './processor';
 import {
   jaFoiProcessada,
   marcarComoProcessada,
-  salvarMensagem
+  salvarMensagem,
+  registrarEtapa
 } from '../../infra/memory';
 import { logger } from '../../components/shared/logger';
 import { attach as attachHealth } from '../../infra/health';
@@ -89,6 +90,10 @@ export function criarApp(): Express {
 
     // Responder rápido (WASenderAPI exige resposta imediata)
     res.status(200).json({ status: 'received' });
+
+    // Correlação acessível no catch para registrar a etapa de erro.
+    let correlMessageId: string | undefined;
+    let correlLeadId: string | undefined;
 
     try {
       // P4: Ignorar eventos internos
@@ -166,19 +171,26 @@ export function criarApp(): Express {
         return;
       }
 
-      // P11: Marcar como processada antes do processamento
-      await marcarComoProcessada(messageId);
-
-      // P12: Persistir mensagem do usuário e processar
+      // P11: Persistir mensagem do usuário (auditoria do recebido)
       const leadId = from.replace(/[^0-9]/g, '');
       const clienteId =
         (req.body?.clienteId as string) ||
         process.env.DEFAULT_CLIENTE_ID ||
         'default';
+      correlMessageId = messageId;
+      correlLeadId = leadId;
 
       await salvarMensagem(leadId, 'user', texto);
+      await registrarEtapa({
+        etapa: 'recebida',
+        messageId,
+        correlationId: messageId,
+        leadId,
+        clienteId
+      });
 
-      const resposta = await processarMensagem({
+      // P12: Processar (enfileira em modo 'queue' ou responde em 'direct')
+      const resultado = await processarMensagem({
         from,
         texto,
         pushName,
@@ -187,13 +199,43 @@ export function criarApp(): Express {
         messageId
       });
 
+      if (resultado.enfileirada) {
+        await registrarEtapa({
+          etapa: 'enfileirada',
+          messageId,
+          correlationId: messageId,
+          leadId,
+          clienteId,
+          jobId: resultado.jobId
+        });
+      }
+
       // P13: Em modo 'direct', enviar resposta e persistir
-      if (resposta) {
-        await enviarMensagem(from, resposta);
-        await salvarMensagem(leadId, 'assistant', resposta);
+      if (resultado.resposta) {
+        await enviarMensagem(from, resultado.resposta);
+        await salvarMensagem(leadId, 'assistant', resultado.resposta);
+        await registrarEtapa({
+          etapa: 'enviada',
+          messageId,
+          correlationId: messageId,
+          leadId,
+          clienteId
+        });
         logger.info({ reqId, from }, 'Webhook: resposta enviada');
       }
+
+      // P14: Marcar idempotência SOMENTE após sucesso (enqueue ou direct).
+      // Se o processamento falhar acima, a exceção impede a marcação e a
+      // mensagem permanece reprocessável.
+      await marcarComoProcessada(messageId);
     } catch (error) {
+      await registrarEtapa({
+        etapa: 'erro',
+        messageId: correlMessageId,
+        correlationId: correlMessageId,
+        leadId: correlLeadId,
+        erroDetalhe: (error as Error).message
+      });
       logger.error(
         { reqId, erro: (error as Error).message },
         'Webhook: erro no processamento'

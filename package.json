@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "ts-node src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc && npm run copy:migrations",
+    "build": "tsc && npm run copy:migrations && npm run verify:build",
     "copy:migrations": "mkdir -p dist/infra/database/migrations && cp src/infra/database/migrations/*.sql dist/infra/database/migrations/",
+    "verify:build": "test \"$(ls -1 src/infra/database/migrations/*.sql | wc -l)\" = \"$(ls -1 dist/infra/database/migrations/*.sql | wc -l)\" || (echo 'ERRO: migrations não copiadas para dist/' && exit 1)",
     "test": "vitest",
     "test:coverage": "vitest --coverage",
     "lint": "eslint src --ext .ts",

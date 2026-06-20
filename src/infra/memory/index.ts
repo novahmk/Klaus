@@ -24,3 +24,5 @@ export {
   injetarContextoFrio
 } from './conversation-repo';
 export type { TurnoHistorico } from './conversation-repo';
+export { registrarEtapa } from './pipeline-status';
+export type { EtapaPipeline, RegistroEtapa } from './pipeline-status';

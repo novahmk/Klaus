@@ -4,7 +4,8 @@ import { QueueName, KlausJobPayload } from './types';
 
 const mocks = vi.hoisted(() => ({
   enviarMensagem: vi.fn(() => Promise.resolve({ ok: true })),
-  salvarMensagem: vi.fn(() => Promise.resolve())
+  salvarMensagem: vi.fn(() => Promise.resolve()),
+  registrarEtapa: vi.fn(() => Promise.resolve())
 }));
 
 vi.mock('../../integrations/wasender/client', () => ({
@@ -12,7 +13,8 @@ vi.mock('../../integrations/wasender/client', () => ({
 }));
 
 vi.mock('../../infra/memory', () => ({
-  salvarMensagem: mocks.salvarMensagem
+  salvarMensagem: mocks.salvarMensagem,
+  registrarEtapa: mocks.registrarEtapa
 }));
 
 describe('JobProcessor - WASender outbound', () => {

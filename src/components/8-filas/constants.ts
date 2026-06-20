@@ -25,6 +25,14 @@ export const DEFAULT_QUEUE_CONFIG: Record<QueueName, QueueConfig> = {
       type: 'fixed',
       delay: 10000
     }
+  },
+  [QueueName.DEAD_LETTER]: {
+    concurrency: 5,
+    attempts: 1,
+    backoff: {
+      type: 'fixed',
+      delay: 0
+    }
   }
 };
 
