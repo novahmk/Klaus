@@ -10,12 +10,15 @@ export * from './integrations/openai';
 import { QueueManager } from './components/8-filas/queue-manager';
 import { JobProcessor } from './components/8-filas/job-processor';
 import { logger } from './components/shared/logger';
+import { attachGlobalHandlers } from './infra/health';
 import {
 	configurarProcessor,
 	criarOrquestradorWasender,
 	iniciarServidor,
 	wasenderConfig
 } from './integrations/wasender';
+
+attachGlobalHandlers();
 
 const orquestrador = criarOrquestradorWasender();
 

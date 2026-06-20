@@ -50,4 +50,8 @@ export class QueueManager {
   public async getQueue(queueName: QueueName): Promise<Queue | undefined> {
     return this.queues.get(queueName);
   }
+
+  public async healthPing(): Promise<string> {
+    return this.connection.ping();
+  }
 }

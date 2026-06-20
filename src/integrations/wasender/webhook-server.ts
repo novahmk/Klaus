@@ -18,6 +18,7 @@ import {
   salvarMensagem
 } from '../../infra/memory';
 import { logger } from '../../components/shared/logger';
+import { attach as attachHealth } from '../../infra/health';
 
 const EVENTOS_IGNORADOS = new Set([
   'messages.upsert',
@@ -58,15 +59,7 @@ export function criarApp(): Express {
     });
   });
 
-  app.get('/health', (_req: Request, res: Response) => {
-    res.json({
-      status: 'ok',
-      uptime: Math.floor(process.uptime()),
-      wasenderApi: Boolean(wasenderConfig.TOKEN),
-      mode: wasenderConfig.PROCESSING_MODE,
-      timestamp: new Date().toISOString()
-    });
-  });
+  attachHealth(app);
 
   app.get('/webhook', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok', webhook: 'active' });
