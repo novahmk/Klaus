@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { QueueManager } from '../../components/8-filas/queue-manager';
 import { query } from '../database/pool';
 import { wasenderConfig } from '../../integrations/wasender/config';
+import { querySupabaseWithTimeout } from '../../lib/supabase';
 import { HealthCheck } from './types';
 
 const openAiApiKey = process.env.OPENAI_API_KEY || '';
@@ -67,6 +68,46 @@ export const pingChecks: HealthCheck[] = [
   }
 ];
 
+const supabaseHealthCheck: HealthCheck = {
+  name: 'supabase',
+  timeout: 4_000,
+  fn: async () => {
+    const enabled = process.env.HEALTH_CHECK_SUPABASE_ENABLED === 'true';
+    if (!enabled) {
+      return { skipped: true, detail: 'HEALTH_CHECK_SUPABASE_ENABLED=false' };
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error('SUPABASE_URL não configurada');
+    }
+
+    try {
+      // Query simples para verificar conectividade: count clientes
+      const result = await querySupabaseWithTimeout(
+        async (client) => {
+          const { count } = await client
+            .from('clientes')
+            .select('*', { count: 'exact', head: true });
+          return count;
+        },
+        4000
+      );
+
+      if (result === null) {
+        throw new Error('Query retornou null (Supabase indisponível ou timeout)');
+      }
+
+      return {
+        detail: `Supabase conectado (${result} clientes, URL: ${supabaseUrl.split('//')[1]?.split('.')[0] || 'unknown'})`
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`Supabase indisponível: ${msg}`);
+    }
+  }
+};
+
 const openAiLiveCheck: HealthCheck = {
   name: 'openai-live',
   timeout: 8_000,
@@ -81,4 +122,4 @@ const openAiLiveCheck: HealthCheck = {
   }
 };
 
-export const fullChecks: HealthCheck[] = [...pingChecks, openAiLiveCheck];
+export const fullChecks: HealthCheck[] = [...pingChecks, supabaseHealthCheck, openAiLiveCheck];

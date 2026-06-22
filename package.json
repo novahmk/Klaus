@@ -31,6 +31,7 @@
     "ioredis": "$ioredis"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
     "axios": "^1.18.0",
     "bullmq": "^5.78.1",
     "dotenv": "^17.4.2",

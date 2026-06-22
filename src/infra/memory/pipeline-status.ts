@@ -5,12 +5,14 @@ import { logger } from '../../components/shared/logger';
 /**
  * Etapas do pipeline de processamento de uma mensagem.
  * Sequência esperada: recebida → enfileirada → processando_ia → enviada.
+ * Quando o lead está em atendimento humano, registra `controle_manual`.
  * `erro` pode ser registrado em qualquer ponto de falha.
  */
 export type EtapaPipeline =
   | 'recebida'
   | 'enfileirada'
   | 'processando_ia'
+  | 'controle_manual'
   | 'enviada'
   | 'erro';
 

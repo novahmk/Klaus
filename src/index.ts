@@ -11,6 +11,9 @@ import { QueueManager } from './components/8-filas/queue-manager';
 import { JobProcessor } from './components/8-filas/job-processor';
 import { logger } from './components/shared/logger';
 import { attachGlobalHandlers } from './infra/health';
+import { iniciarConfigLoader } from './modules/config-loader';
+import { iniciarFollowupScheduler } from './modules/followup/scheduler';
+import { iniciarMetricsCron } from './modules/metrics/cron';
 import {
 	configurarProcessor,
 	criarOrquestradorWasender,
@@ -51,6 +54,18 @@ async function inicializar(): Promise<void> {
 		configurarProcessor({ orquestrador });
 		logger.info('Processor WASender configurado em modo direct');
 	}
+
+
+	// Sprint 1: Config Loader (não-bloqueante, desligável por flag)
+	if (process.env.CONFIG_LOADER_ENABLED === 'true') {
+		void iniciarConfigLoader();
+	}
+
+	// Sprint 4: Follow-up scheduler (não-bloqueante, desligável por flag)
+	iniciarFollowupScheduler();
+
+	// Sprint 5: Métricas diárias (não-bloqueante, desligável por flag)
+	iniciarMetricsCron();
 
 	iniciarServidor();
 }

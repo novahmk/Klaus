@@ -7,6 +7,7 @@ import { ValidadorResposta } from './validator';
 import { GERACAO_CONFIG } from './constants';
 import { GeracaoInput } from './types';
 import { getOpenAIConfig } from '../../integrations/openai';
+import { obterSystemPrompt } from '../../modules/config-loader/prompt-builder';
 import { logger } from '../shared/logger';
 
 export class ComponenteGeracao {
@@ -25,7 +26,12 @@ export class ComponenteGeracao {
     const cached = await this.redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    const prompt = PromptBuilder.build(input);
+    const promptPadrao = PromptBuilder.build(input);
+    const promptDinamicoHabilitado = process.env.DYNAMIC_PROMPT_ENABLED === 'true';
+    const promptDinamico = promptDinamicoHabilitado
+      ? obterSystemPrompt(input.clienteId)
+      : '';
+    const prompt = promptDinamico || promptPadrao;
 
     const inicio = Date.now();
     let completion;
