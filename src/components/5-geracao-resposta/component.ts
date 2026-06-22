@@ -8,6 +8,7 @@ import { GERACAO_CONFIG } from './constants';
 import { GeracaoInput } from './types';
 import { getOpenAIConfig } from '../../integrations/openai';
 import { obterSystemPrompt } from '../../modules/config-loader/prompt-builder';
+import { obterConfigIA } from '../../modules/config-loader/ia-config-loader';
 import { logger } from '../shared/logger';
 
 export class ComponenteGeracao {
@@ -20,27 +21,44 @@ export class ComponenteGeracao {
   async executar(input: GeracaoInput): Promise<{
     resposta: string;
     confianca: number;
+    config_versao?: number;
   }> {
     const cacheKey = `gen:${input.tipoObjecao}:${input.contextoLead.cargo}`;
 
     const cached = await this.redis.get(cacheKey);
     if (cached) return JSON.parse(cached);
 
-    const promptPadrao = PromptBuilder.build(input);
+    // Load IA config dynamically from Supabase (with automatic fallback to defaults)
+    let config;
+    try {
+      config = await obterConfigIA(input.clienteId);
+    } catch (erro) {
+      logger.warn(
+        { leadId: input.leadId, erro: (erro as Error).message },
+        'IA: falha ao carregar config dinâmica, usando defaults'
+      );
+    }
+
+    const promptPadrao = PromptBuilder.build(input, config);
     const promptDinamicoHabilitado = process.env.DYNAMIC_PROMPT_ENABLED === 'true';
     const promptDinamico = promptDinamicoHabilitado
       ? obterSystemPrompt(input.clienteId)
       : '';
     const prompt = promptDinamico || promptPadrao;
 
+    const temperatura = config?.parametros.temperatura ?? GERACAO_CONFIG.TEMPERATURE;
+    const maxTokens = config?.parametros.max_tokens ?? GERACAO_CONFIG.MAX_TOKENS;
+    const modelo = config?.parametros.modelo_chat ?? getOpenAIConfig().CHAT_MODEL;
+    const cacheTtl = config?.parametros.cache_ttl_resposta_segundos ?? 3600;
+
     const inicio = Date.now();
     let completion;
     try {
       completion = await this.openai.chat.completions.create({
-        model: getOpenAIConfig().CHAT_MODEL,
+        model: modelo,
         messages: [{ role: 'system', content: prompt }],
-        temperature: GERACAO_CONFIG.TEMPERATURE,
-        max_tokens: GERACAO_CONFIG.MAX_TOKENS
+        temperature: temperatura,
+        max_tokens: maxTokens
       });
     } catch (erro) {
       // Log de baixo custo: apenas metadados, sem prompt/resposta.
@@ -57,9 +75,10 @@ export class ComponenteGeracao {
     }
 
     const resposta = ValidadorResposta.truncar(
-      completion.choices[0].message.content ?? ''
+      completion.choices[0].message.content ?? '',
+      config
     );
-    const score = ValidadorResposta.validar(resposta, input);
+    const score = ValidadorResposta.validar(resposta, input, config);
 
     // Log de baixo custo: metadados de observabilidade, sem conteúdo.
     logger.info(
@@ -69,14 +88,19 @@ export class ComponenteGeracao {
         latenciaMs: Date.now() - inicio,
         model: completion.model,
         respostaVazia: resposta.length === 0,
-        tamanhoResposta: resposta.length
+        tamanhoResposta: resposta.length,
+        configVersao: config?.versao
       },
       'IA: resposta gerada'
     );
 
-    const result = { resposta, confianca: score / 100 };
+    const result = {
+      resposta,
+      confianca: score / 100,
+      config_versao: config?.versao
+    };
 
-    await this.redis.set(cacheKey, JSON.stringify(result), 'EX', 3600);
+    await this.redis.set(cacheKey, JSON.stringify(result), 'EX', cacheTtl);
 
     return result;
   }
