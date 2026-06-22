@@ -1,20 +1,14 @@
 // src/components/5-geracao-resposta/constants.ts
+//
+// CRITERIOS_VALIDACAO e GERACAO_CONFIG foram removidos daqui.
+// Os valores agora são carregados dinamicamente do Supabase via
+// src/modules/ia-config-loader. Os defaults estão em
+// src/modules/ia-config-loader/defaults.ts.
 
-export const CRITERIOS_VALIDACAO = {
-  MIN_SCORE: 70,
-  MAX_RETRIES: 3,
-  MIN_LENGTH: 150,
-  MAX_LENGTH: 500
-};
-
-/** Parâmetros de geração para conter respostas longas/verbosas. */
-export const GERACAO_CONFIG = {
-  // ~500–600 caracteres: trava física de tamanho na chamada da IA.
-  MAX_TOKENS: 200,
-  // Menor temperatura = respostas mais diretas e menos prolixas.
-  TEMPERATURE: 0.4
-};
-
+/**
+ * Tom de voz fallback — usado quando cfg_ia_tom_voz não está disponível.
+ * Sobrescrito pela ConfigIATomVoz carregada do Supabase.
+ */
 export const INSTRUCOES_TOM = {
   EXECUTIVO:
     'Foco em ROI, visão estratégica e resultados de alto nível. Linguagem direta.',

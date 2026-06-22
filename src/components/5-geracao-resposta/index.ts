@@ -2,7 +2,7 @@
 export { ComponenteGeracao } from './component';
 export { PromptBuilder } from './prompts';
 export { ValidadorResposta } from './validator';
-export { CRITERIOS_VALIDACAO, INSTRUCOES_TOM } from './constants';
+export { INSTRUCOES_TOM } from './constants';
 export {
   TipoObjecao,
   ContextoLead,

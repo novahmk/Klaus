@@ -1,6 +1,7 @@
 import { logger } from '../../components/shared/logger';
 import { getSupabaseServiceClient } from '../../lib/supabase';
 import { enviarFollowup } from './sender';
+import { ConfigIADisparos } from '../ia-config-loader/types';
 
 let followupHandle: NodeJS.Timeout | null = null;
 
@@ -37,6 +38,44 @@ function dentroJanelaHorario(config: FollowupConfig): boolean {
 function ehFimDeSemana(): boolean {
   const dia = new Date().getDay();
   return dia === 0 || dia === 6;
+}
+
+/**
+ * Carrega configurações de disparos automáticos da tabela cfg_ia_disparos.
+ * Retorna null se Supabase indisponível ou cliente não encontrado.
+ * Fallback: usar followup_config existente.
+ */
+export async function carregarConfigDisparos(
+  clienteId: string
+): Promise<ConfigIADisparos | null> {
+  const client = getSupabaseServiceClient();
+  if (!client) return null;
+
+  const { data, error } = await client
+    .from('cfg_ia_disparos')
+    .select('*')
+    .eq('cliente_id', clienteId)
+    .single();
+
+  if (error || !data) {
+    logger.warn(
+      { clienteId, erro: error?.message },
+      'Follow-up: cfg_ia_disparos não encontrada, usando followup_config'
+    );
+    return null;
+  }
+
+  return data as ConfigIADisparos;
+}
+
+/**
+ * Calcula intervalo aleatório em ms entre intervalo_min e intervalo_max segundos.
+ * Exportado para uso futuro no agendamento dinâmico de disparos.
+ */
+export function calcularIntervaloAleatorio(config: ConfigIADisparos): number {
+  const min = config.intervalo_min_segundos * 1000;
+  const max = config.intervalo_max_segundos * 1000;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 async function carregarConfigAtiva(clienteId: string): Promise<FollowupConfig | null> {
@@ -138,7 +177,6 @@ async function obterIndiceProximoModelo(input: {
   const iaMsgs = count || 0;
   return iaMsgs % input.totalModelos;
 }
-
 async function executarCicloFollowup(): Promise<void> {
   if (process.env.FOLLOWUP_ENABLED !== 'true') {
     return;
@@ -182,9 +220,13 @@ async function executarCicloFollowup(): Promise<void> {
     return;
   }
 
+  // Tenta carregar limite_diario de cfg_ia_disparos; fallback para max_envios
+  const configDisparos = await carregarConfigDisparos(clienteId);
+  const limiteDiario = configDisparos?.limite_diario ?? config.max_envios;
+
   let enviados = 0;
   for (const lead of leads) {
-    if (enviados >= config.max_envios) break;
+    if (enviados >= limiteDiario) break;
 
     const idx = await obterIndiceProximoModelo({
       leadId: lead.lead_id,
@@ -202,10 +244,13 @@ async function executarCicloFollowup(): Promise<void> {
   }
 
   logger.info(
-    { clienteId, elegiveis: leads.length, enviados },
+    { clienteId, elegiveis: leads.length, enviados, limiteDiario },
     'Follow-up: ciclo finalizado'
   );
 }
+
+
+
 
 export function iniciarFollowupScheduler(): void {
   if (process.env.FOLLOWUP_ENABLED !== 'true') {
