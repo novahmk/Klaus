@@ -140,13 +140,10 @@ export const TEMPLATES_PERGUNTAS: TemplatoPergunta[] = [
   }
 ];
 
-/**
- * Intervalo válido de caracteres
- */
-export const CARACTERES = {
-  MINIMO: 20,
-  MAXIMO: 150
-};
+// CARACTERES.MINIMO e CARACTERES.MAXIMO foram removidos.
+// Os limites dinâmicos são fornecidos via ConfigIA (cfg_ia_parametros.min_length / max_length).
+// Consulte src/modules/ia-config para obter os parâmetros por cliente.
+// Valores padrão de fallback: min_length=5, max_length=500.
 
 /**
  * Limite de similaridade máxima permitida
@@ -187,15 +184,9 @@ export const CACHE_DEFAULT_TTL = 7200; // 2 horas
  */
 export const GPT_MODEL = 'gpt-4-turbo-preview';
 
-/**
- * Temperatura para respostas do GPT
- */
-export const GPT_TEMPERATURE = 0.4;
-
-/**
- * Máximo de tokens para resposta
- */
-export const GPT_MAX_TOKENS = 200;
+// GPT_TEMPERATURE e GPT_MAX_TOKENS foram removidos.
+// Os valores dinâmicos são fornecidos via ConfigIA (cfg_ia_parametros).
+// Consulte src/modules/ia-config para obter os parâmetros por cliente.
 
 /**
  * Algoritmo de determinação de camada

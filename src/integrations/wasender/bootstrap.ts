@@ -13,6 +13,8 @@ import {
   StateMachine
 } from '../../components/7-orquestracao';
 import { OpenAIClient, getOpenAIConfig } from '../openai';
+import { obterConfigIA } from '../../modules/ia-config';
+import type { ConfigIA } from '../../modules/ia-config/types';
 
 interface BuscaAdapterInput {
   texto: string;
@@ -75,6 +77,8 @@ export function criarOrquestradorWasender(): OrquestradorKlaus {
     enableCache: true,
     enableFallback: true,
     enableGpt: Boolean(openaiApiKey)
+    // iaTemperature, iaMaxTokens e iaMinConfianca são injetados por mensagem
+    // no comp1Adapter abaixo, após carregar a ConfigIA do cliente.
   });
 
   const buscador = new BuscadorBanco(
@@ -83,19 +87,45 @@ export function criarOrquestradorWasender(): OrquestradorKlaus {
     criarOpenAIClient(openaiApiKey)
   );
 
-  const gerador = openaiApiKey
-    ? new ComponenteGeracao(new OpenAI({ apiKey: openaiApiKey }), pool, redis)
+  // O gerador base é criado sem ConfigIA; ela é injetada por mensagem no comp5Adapter.
+  const geradorBase = openaiApiKey
+    ? new OpenAI({ apiKey: openaiApiKey })
     : null;
 
+  /**
+   * Carrega ConfigIA para o cliente da mensagem.
+   * Usa cache interno do módulo ia-config (TTL 5 min).
+   * Em caso de falha, retorna undefined e os componentes usam seus fallbacks.
+   */
+  async function carregarConfigIA(clienteId: string): Promise<ConfigIA | undefined> {
+    try {
+      return await obterConfigIA(clienteId);
+    } catch {
+      return undefined;
+    }
+  }
+
   const comp1Adapter = {
-    detectar: (mensagem: MensagemLead) =>
-      detector.detectar({
+    async detectar(mensagem: MensagemLead) {
+      // Carrega ConfigIA para injetar parâmetros dinâmicos na detecção
+      const configIA = await carregarConfigIA(mensagem.clienteId);
+
+      // Reconfigura o detector com os parâmetros do cliente para esta chamada
+      if (configIA) {
+        detector['config'].iaTemperature = configIA.parametros.temperature;
+        detector['config'].iaMaxTokens = configIA.parametros.max_tokens;
+        // min_confianca vem de cfg_ia_validacao (0-1), detector usa escala 0-100
+        detector['config'].iaMinConfianca = configIA.validacao.min_confianca * 100;
+      }
+
+      return detector.detectar({
         mensagem: mensagem.texto,
         contexto: {
           leadId: mensagem.leadId,
           faseFunil: String(mensagem.metadata?.faseFunil || 'inicial')
         }
-      })
+      });
+    }
   };
 
   const comp3Adapter = {
@@ -122,7 +152,17 @@ export function criarOrquestradorWasender(): OrquestradorKlaus {
 
   const comp5Adapter = {
     async gerar(input: GeracaoAdapterInput): Promise<string> {
-      if (!gerador) return textoFallback(input.mensagem);
+      if (!geradorBase) return textoFallback(input.mensagem);
+
+      // Carrega ConfigIA para injetar parâmetros dinâmicos na geração de resposta
+      const configIA = await carregarConfigIA(input.clienteId);
+
+      const gerador = new ComponenteGeracao(
+        geradorBase,
+        pool,
+        redis,
+        configIA
+      );
 
       const resultado = await gerador.executar({
         clienteId: input.clienteId,

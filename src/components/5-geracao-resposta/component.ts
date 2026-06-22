@@ -9,12 +9,15 @@ import { GeracaoInput } from './types';
 import { getOpenAIConfig } from '../../integrations/openai';
 import { obterSystemPrompt } from '../../modules/config-loader/prompt-builder';
 import { logger } from '../shared/logger';
+import type { ConfigIA } from '../../modules/ia-config/types';
 
 export class ComponenteGeracao {
   constructor(
     private openai: OpenAI,
     private db: Pool,
-    private redis: Redis
+    private redis: Redis,
+    /** Configuração dinâmica de IA por cliente (opcional; usa GERACAO_CONFIG como fallback) */
+    private configIA?: ConfigIA
   ) {}
 
   async executar(input: GeracaoInput): Promise<{
@@ -33,14 +36,18 @@ export class ComponenteGeracao {
       : '';
     const prompt = promptDinamico || promptPadrao;
 
+    // Parâmetros dinâmicos: usa ConfigIA se disponível, senão GERACAO_CONFIG (fallback)
+    const temperature = this.configIA?.parametros.temperature ?? GERACAO_CONFIG.TEMPERATURE;
+    const maxTokens = this.configIA?.parametros.max_tokens ?? GERACAO_CONFIG.MAX_TOKENS;
+
     const inicio = Date.now();
     let completion;
     try {
       completion = await this.openai.chat.completions.create({
         model: getOpenAIConfig().CHAT_MODEL,
         messages: [{ role: 'system', content: prompt }],
-        temperature: GERACAO_CONFIG.TEMPERATURE,
-        max_tokens: GERACAO_CONFIG.MAX_TOKENS
+        temperature,
+        max_tokens: maxTokens
       });
     } catch (erro) {
       // Log de baixo custo: apenas metadados, sem prompt/resposta.
@@ -56,10 +63,16 @@ export class ComponenteGeracao {
       throw erro;
     }
 
+    // Limites dinâmicos: usa ConfigIA se disponível, senão CRITERIOS_VALIDACAO (fallback)
+    const maxLength = this.configIA?.parametros.max_length;
+    const minLength = this.configIA?.parametros.min_length;
+
     const resposta = ValidadorResposta.truncar(
-      completion.choices[0].message.content ?? ''
+      completion.choices[0].message.content ?? '',
+      maxLength,
+      minLength
     );
-    const score = ValidadorResposta.validar(resposta, input);
+    const score = ValidadorResposta.validar(resposta, input, minLength, maxLength);
 
     // Log de baixo custo: metadados de observabilidade, sem conteúdo.
     logger.info(

@@ -2,6 +2,26 @@ import { logger } from '../../components/shared/logger';
 import { getSupabaseServiceClient } from '../../lib/supabase';
 import { enviarFollowup } from './sender';
 
+// ---------------------------------------------------------------------------
+// TODO (cfg_ia_disparos): Integração futura com tabela cfg_ia_disparos
+//
+// Quando implementado, o scheduler deve:
+//   1. Chamar obterConfigIA(clienteId) de '../../modules/ia-config'
+//   2. Usar config.disparos.intervalo_min_segundos e
+//      config.disparos.intervalo_max_segundos para calcular o intervalo
+//      aleatório entre disparos (em vez do intervalo fixo atual de 30 min).
+//   3. Usar config.disparos.limite_diario para limitar o total de envios
+//      por dia por cliente (em vez de config.max_envios da followup_config).
+//
+// Exemplo de uso futuro:
+//   const configIA = await obterConfigIA(clienteId);
+//   const intervaloMs = randomBetween(
+//     configIA.disparos.intervalo_min_segundos * 1000,
+//     configIA.disparos.intervalo_max_segundos * 1000
+//   );
+//   const limiteDiario = configIA.disparos.limite_diario;
+// ---------------------------------------------------------------------------
+
 let followupHandle: NodeJS.Timeout | null = null;
 
 type FollowupConfig = {

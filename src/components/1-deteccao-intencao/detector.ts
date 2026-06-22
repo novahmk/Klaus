@@ -90,7 +90,9 @@ export class DetectorIntencao {
       if (this.config.enableGpt && this.openaiClient) {
         const resultadoGpt = await this.detectarComGpt(input);
         
-        if (resultadoGpt && resultadoGpt.confianca >= 70) {
+        // Limiar de confiança: usa iaMinConfianca (0-100) se configurado, senão 70
+        const limiarConfianca = this.config.iaMinConfianca ?? 70;
+        if (resultadoGpt && resultadoGpt.confianca >= limiarConfianca) {
           // Armazenar no cache se confiança aceitável
           if (this.config.enableCache) {
             await this.cache.armazenar(input.mensagem, resultadoGpt, input.contexto);
@@ -179,8 +181,8 @@ export class DetectorIntencao {
           { role: 'system', content: promptSistema },
           { role: 'user', content: promptUsuario }
         ],
-        temperature: 0.3,
-        maxTokens: 500
+        temperature: this.config.iaTemperature ?? 0.3,
+        maxTokens: this.config.iaMaxTokens ?? 500
       });
 
       if (!conteudoResposta) {

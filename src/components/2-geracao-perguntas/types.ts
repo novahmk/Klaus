@@ -68,6 +68,14 @@ export interface GeradorConfig {
   enableGpt?: boolean;
   cacheExpireSec?: number;
   maxSimilaridade?: number; // Máximo 70%
+  /** Temperatura dinâmica da IA por cliente (cfg_ia_parametros.temperature) */
+  iaTemperature?: number;
+  /** Máximo de tokens para geração de perguntas (cfg_ia_parametros.max_tokens) */
+  iaMaxTokens?: number;
+  /** Comprimento mínimo de pergunta em caracteres (cfg_ia_parametros.min_length) */
+  iaMinLength?: number;
+  /** Comprimento máximo de pergunta em caracteres (cfg_ia_parametros.max_length) */
+  iaMaxLength?: number;
 }
 
 /**

@@ -3,11 +3,16 @@
 export const CRITERIOS_VALIDACAO = {
   MIN_SCORE: 70,
   MAX_RETRIES: 3,
+  // Valores padrão de fallback — substituídos por cfg_ia_parametros quando disponível.
   MIN_LENGTH: 150,
   MAX_LENGTH: 500
 };
 
-/** Parâmetros de geração para conter respostas longas/verbosas. */
+/**
+ * Parâmetros de geração — valores padrão de fallback.
+ * Em produção, estes são substituídos pelos valores de cfg_ia_parametros
+ * injetados via ConfigIA.  Consulte src/modules/ia-config.
+ */
 export const GERACAO_CONFIG = {
   // ~500–600 caracteres: trava física de tamanho na chamada da IA.
   MAX_TOKENS: 200,

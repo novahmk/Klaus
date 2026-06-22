@@ -14,9 +14,7 @@ import {
   TEMPLATES_PERGUNTAS,
   determinarCamada,
   CACHE_DEFAULT_TTL,
-  GPT_MODEL,
-  GPT_TEMPERATURE,
-  GPT_MAX_TOKENS
+  GPT_MODEL
 } from './constants';
 import { ValidadorPergunta } from './validators';
 import { GerenciadorCachePergunta } from './cache';
@@ -208,8 +206,8 @@ export class GeradorPerguntas {
           { role: 'system', content: promptSistema },
           { role: 'user', content: promptUsuario }
         ],
-        temperature: GPT_TEMPERATURE,
-        maxTokens: GPT_MAX_TOKENS
+        temperature: this.config.iaTemperature ?? 0.4,
+        maxTokens: this.config.iaMaxTokens ?? 200
       });
 
       if (!conteudoResposta) {
@@ -225,10 +223,12 @@ export class GeradorPerguntas {
         return null;
       }
 
-      // Validar pergunta completa
+      // Validar pergunta completa (usa limites dinâmicos da ConfigIA)
       const validacaoPergunta = ValidadorPergunta.validarCompleto(
         validacao.pergunta || '',
-        input.perguntasJaFeitas || []
+        input.perguntasJaFeitas || [],
+        this.config.iaMinLength,
+        this.config.iaMaxLength
       );
 
       if (!validacaoPergunta.valido) {
@@ -247,8 +247,8 @@ export class GeradorPerguntas {
         origem: 'gpt'
       };
 
-      // Validar resultado final
-      if (!ValidadorPergunta.validarResultado(resultado)) {
+      // Validar resultado final (usa limites dinâmicos da ConfigIA)
+      if (!ValidadorPergunta.validarResultado(resultado, this.config.iaMinLength, this.config.iaMaxLength)) {
         logger.warn('Resultado final após GPT não passou na validação');
         return null;
       }
@@ -275,10 +275,12 @@ export class GeradorPerguntas {
       );
 
       if (templateEspecifico) {
-        // Validar se não é muito similar
+        // Validar se não é muito similar (usa limites dinâmicos da ConfigIA)
         const validacao = ValidadorPergunta.validarCompleto(
           templateEspecifico.pergunta,
-          input.perguntasJaFeitas || []
+          input.perguntasJaFeitas || [],
+          this.config.iaMinLength,
+          this.config.iaMaxLength
         );
 
         if (validacao.valido) {
@@ -298,7 +300,9 @@ export class GeradorPerguntas {
       for (const template of templates) {
         const validacao = ValidadorPergunta.validarCompleto(
           template.pergunta,
-          input.perguntasJaFeitas || []
+          input.perguntasJaFeitas || [],
+          this.config.iaMinLength,
+          this.config.iaMaxLength
         );
 
         if (validacao.valido) {
@@ -318,7 +322,9 @@ export class GeradorPerguntas {
       if (perguntaAlternativa) {
         const validacao = ValidadorPergunta.validarCompleto(
           perguntaAlternativa,
-          input.perguntasJaFeitas || []
+          input.perguntasJaFeitas || [],
+          this.config.iaMinLength,
+          this.config.iaMaxLength
         );
 
         if (validacao.valido) {
