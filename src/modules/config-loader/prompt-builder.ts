@@ -1,19 +1,25 @@
 /**
  * Sprint 1: Prompt Builder
  * Constrói system prompt dinâmico a partir das configurações do dashboard.
+ * Integra ConfigIA (tom_voz e regras) quando disponível.
  */
 
 import { getGlobalCache } from '../../lib/cache';
 import { logger } from '../../components/shared/logger';
 import { DashboardConfig } from './types';
+import { ConfigIA } from '../ia-config-loader/types';
 
 const CACHE_KEY_PROMPT = (clienteId: string) => `prompt:${clienteId}`;
 
 /**
  * Constrói system prompt a partir de configurações do dashboard.
+ * Aceita ConfigIA opcional para injetar tom_voz e regras dinâmicas.
  * Fallback: se config não disponível, retorna prompt vazio/minimalista.
  */
-export function construirSystemPrompt(config: DashboardConfig | null): string {
+export function construirSystemPrompt(
+  config: DashboardConfig | null,
+  configIA?: ConfigIA | null
+): string {
   if (!config) {
     logger.debug('PromptBuilder: config null, retornando prompt minimalista');
     return `Você é um assistente de vendas profissional. 
@@ -44,11 +50,16 @@ Sempre pergunte antes de descartar oportunidades.`;
     linhas.push(`Atuamos na indústria de ${config.contexto.contexto_industria}`);
   }
 
-  // Tom de voz
-  if (config.tom_voz?.tom_geral) {
-    linhas.push(
-      `\nComunique-se de forma ${config.tom_voz.tom_geral} mas humanizada.`
-    );
+  // Tom de voz: ConfigIA tem prioridade sobre DashboardConfig
+  const tomGeral = configIA?.tom_voz?.tom_geral || config.tom_voz?.tom_geral;
+  if (tomGeral) {
+    linhas.push(`\nComunique-se de forma ${tomGeral} mas humanizada.`);
+  }
+  if (configIA?.tom_voz?.tom_executivo) {
+    linhas.push(`Tom executivo: ${configIA.tom_voz.tom_executivo}`);
+  }
+  if (configIA?.tom_voz?.tom_tecnico) {
+    linhas.push(`Tom técnico: ${configIA.tom_voz.tom_tecnico}`);
   }
 
   // Abordagens
@@ -64,22 +75,39 @@ Sempre pergunte antes de descartar oportunidades.`;
     linhas.push(`\nEvite: ${config.abordagens.evitar.join(', ')}`);
   }
 
-  // Regras
-  if (config.regras?.regras && config.regras.regras.length > 0) {
+  // Regras: ConfigIA tem prioridade sobre DashboardConfig
+  const regrasIA = configIA?.regras?.regras?.length
+    ? configIA.regras.regras
+    : config.regras?.regras;
+
+  if (regrasIA && regrasIA.length > 0) {
     linhas.push(`\nRegras importantes:`);
-    config.regras.regras.forEach((regra) => {
+    regrasIA.forEach((regra) => {
       linhas.push(`  - ${regra}`);
     });
   }
 
-  if (
-    config.regras?.palavras_chave_obrigatorias &&
-    config.regras.palavras_chave_obrigatorias.length > 0
-  ) {
+  // Palavras-chave obrigatórias: ConfigIA tem prioridade
+  const palavrasObrigatorias = configIA?.regras?.palavras_chave_obrigatorias?.length
+    ? configIA.regras.palavras_chave_obrigatorias
+    : config.regras?.palavras_chave_obrigatorias;
+
+  if (palavrasObrigatorias && palavrasObrigatorias.length > 0) {
     linhas.push(
-      `Sempre mencione: ${config.regras.palavras_chave_obrigatorias.join(', ')}`
+      `Sempre mencione: ${palavrasObrigatorias.join(', ')}`
     );
   }
+
+  // Palavras bloqueadas (apenas ConfigIA)
+  if (
+    configIA?.regras?.palavras_chave_bloqueadas &&
+    configIA.regras.palavras_chave_bloqueadas.length > 0
+  ) {
+    linhas.push(
+      `Nunca use as palavras: ${configIA.regras.palavras_chave_bloqueadas.join(', ')}`
+    );
+  }
+
 
   const prompt = linhas.join('\n');
   logger.debug(

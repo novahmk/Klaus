@@ -12,6 +12,7 @@ import { JobProcessor } from './components/8-filas/job-processor';
 import { logger } from './components/shared/logger';
 import { attachGlobalHandlers } from './infra/health';
 import { iniciarConfigLoader } from './modules/config-loader';
+import { iniciarIAConfigLoader } from './modules/ia-config-loader';
 import { iniciarFollowupScheduler } from './modules/followup/scheduler';
 import { iniciarMetricsCron } from './modules/metrics/cron';
 import {
@@ -59,6 +60,7 @@ async function inicializar(): Promise<void> {
 	// Sprint 1: Config Loader (não-bloqueante, desligável por flag)
 	if (process.env.CONFIG_LOADER_ENABLED === 'true') {
 		void iniciarConfigLoader();
+		void iniciarIAConfigLoader();
 	}
 
 	// Sprint 4: Follow-up scheduler (não-bloqueante, desligável por flag)

@@ -16,6 +16,36 @@ import { ComponenteGeracao } from './component';
 import { INSTRUCOES_TOM } from './constants';
 import { GeracaoInput } from './types';
 
+// Mock obterConfigIA para retornar defaults sem chamar Supabase
+vi.mock('../../modules/ia-config-loader/loader', () => ({
+  obterConfigIA: vi.fn().mockResolvedValue({
+    cliente_id: 'cliente-1',
+    parametros: { max_tokens: 200, temperature: 0.4, model: 'gpt-4o-mini' },
+    validacao: { min_length: 150, max_length: 500, min_score: 70, max_retries: 3 },
+    tom_voz: {
+      tom_geral: 'profissional',
+      tom_executivo: 'Foco em ROI, visão estratégica e resultados de alto nível. Linguagem direta.',
+      tom_tecnico: 'Foco em especificações, integração e performance. Linguagem precisa.',
+      tom_suporte: 'Foco em facilidade de uso, implementação e dia a dia. Linguagem prática.'
+    },
+    regras: {
+      regras: ['Não invente dados.', 'Seja empático.'],
+      palavras_chave_bloqueadas: ['infelizmente'],
+      palavras_chave_obrigatorias: []
+    },
+    disparos: { intervalo_min_segundos: 3600, intervalo_max_segundos: 7200, limite_diario: 50 },
+    aprendizado: { ativo: false, metricas_habilitadas: false },
+    ultima_atualizacao: new Date().toISOString()
+  })
+}));
+
+// Mock obterSystemPrompt para não depender de cache externo
+vi.mock('../../modules/config-loader/prompt-builder', () => ({
+  obterSystemPrompt: vi.fn().mockReturnValue('')
+}));
+
+
+
 function criarInput(overrides: Partial<GeracaoInput> = {}): GeracaoInput {
   return {
     clienteId: 'cliente-1',
@@ -212,5 +242,97 @@ describe('Componente 5 - ComponenteGeracao.executar', () => {
 
     const resultado = await componente.executar(criarInput());
     expect(resultado.resposta).toBe('');
+  });
+});
+
+describe('Componente 5 - ValidadorResposta com ConfigIAValidacao dinâmica', () => {
+  const configCustom = {
+    min_length: 50,
+    max_length: 200,
+    min_score: 60,
+    max_retries: 5
+  };
+
+  it('deve usar min_length da config dinâmica', () => {
+    // Resposta com 60 chars — acima do min_length=50, abaixo do padrão 150
+    const resposta = 'Entendo sua preocupação. Podemos encontrar uma solução?';
+    expect(resposta.length).toBeGreaterThanOrEqual(50);
+    // Com config dinâmica (min=50): não penaliza por tamanho
+    expect(ValidadorResposta.validar(resposta, configCustom)).toBe(100);
+    // Sem config (min=150): penaliza por tamanho
+    expect(ValidadorResposta.validar(resposta)).toBe(70);
+  });
+
+  it('deve usar max_length da config dinâmica para truncar', () => {
+    const resposta = 'A'.repeat(300);
+    const truncada = ValidadorResposta.truncar(resposta, configCustom);
+    expect(truncada.length).toBeLessThanOrEqual(200);
+  });
+
+  it('truncar sem config usa DEFAULT_VALIDACAO.max_length (500)', () => {
+    const resposta = 'A'.repeat(600);
+    const truncada = ValidadorResposta.truncar(resposta);
+    expect(truncada.length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('Componente 5 - PromptBuilder com ConfigIA dinâmica', () => {
+  const configIA = {
+    cliente_id: 'cliente-test',
+    parametros: { max_tokens: 200, temperature: 0.4, model: 'gpt-4o-mini' },
+    validacao: { min_length: 150, max_length: 500, min_score: 70, max_retries: 3 },
+    tom_voz: {
+      tom_geral: 'consultivo',
+      tom_executivo: 'Tom executivo customizado.',
+      tom_tecnico: 'Tom técnico customizado.',
+      tom_suporte: 'Tom suporte customizado.'
+    },
+    regras: {
+      regras: ['Regra dinâmica 1.', 'Regra dinâmica 2.'],
+      palavras_chave_bloqueadas: ['nunca'],
+      palavras_chave_obrigatorias: ['sempre']
+    },
+    disparos: { intervalo_min_segundos: 3600, intervalo_max_segundos: 7200, limite_diario: 50 },
+    aprendizado: { ativo: false, metricas_habilitadas: false },
+    ultima_atualizacao: new Date().toISOString()
+  };
+
+  it('deve usar tom_executivo da ConfigIA para CEO', () => {
+    const prompt = PromptBuilder.build(
+      criarInput({ contextoLead: { cargo: 'CEO', empresa: 'X', nicho: 'tech', estagio: 'novo' } }),
+      configIA
+    );
+    expect(prompt).toContain('Tom executivo customizado.');
+  });
+
+  it('deve usar tom_tecnico da ConfigIA para CTO', () => {
+    const prompt = PromptBuilder.build(
+      criarInput({ contextoLead: { cargo: 'CTO', empresa: 'X', nicho: 'tech', estagio: 'novo' } }),
+      configIA
+    );
+    expect(prompt).toContain('Tom técnico customizado.');
+  });
+
+  it('deve injetar regras dinâmicas no prompt', () => {
+    const prompt = PromptBuilder.build(criarInput(), configIA);
+    expect(prompt).toContain('Regra dinâmica 1.');
+    expect(prompt).toContain('Regra dinâmica 2.');
+  });
+
+  it('deve injetar palavras bloqueadas no prompt', () => {
+    const prompt = PromptBuilder.build(criarInput(), configIA);
+    expect(prompt).toContain('nunca');
+  });
+
+  it('deve injetar palavras obrigatórias no prompt', () => {
+    const prompt = PromptBuilder.build(criarInput(), configIA);
+    expect(prompt).toContain('sempre');
+  });
+
+  it('sem ConfigIA usa fallback baseado em cargo', () => {
+    const prompt = PromptBuilder.build(
+      criarInput({ contextoLead: { cargo: 'CEO', empresa: 'X', nicho: 'tech', estagio: 'novo' } })
+    );
+    expect(prompt).toContain(INSTRUCOES_TOM.EXECUTIVO);
   });
 });
