@@ -8,7 +8,7 @@ import { GERACAO_CONFIG } from './constants';
 import { GeracaoInput } from './types';
 import { getOpenAIConfig } from '../../integrations/openai';
 import { obterSystemPrompt } from '../../modules/config-loader/prompt-builder';
-import { logger } from '../shared/logger';
+import { logger } from '../../shared/logger';
 
 export class ComponenteGeracao {
   constructor(

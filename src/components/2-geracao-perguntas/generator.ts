@@ -25,7 +25,7 @@ import {
   gerarPromptUsuario,
   gerarTemplateAlternativo
 } from './prompts';
-import { logger } from '../shared/logger';
+import { logger } from '../../shared/logger';
 import { OpenAIClient } from '../../integrations/openai';
 
 export class GeradorPerguntas {

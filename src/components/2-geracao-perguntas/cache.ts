@@ -6,7 +6,7 @@
 import { createHash } from 'crypto';
 import { GeradorPerguntasOutput } from './types';
 import { CACHE_DEFAULT_TTL } from './constants';
-import { logger } from '../shared/logger';
+import { logger } from '../../shared/logger';
 
 export interface CacheConfig {
   redisUrl?: string;

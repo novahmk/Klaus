@@ -9,7 +9,7 @@ import { GerenciadorCache } from './cache';
 import { ValidadorIntencao } from './validator';
 import { gerarPromptSistema, gerarPromptUsuario } from './prompts';
 import { CONFIDENCE_MULTIPLIERS } from './constants';
-import { logger } from '../shared/logger';
+import { logger } from '../../shared/logger';
 import { OpenAIClient } from '../../integrations/openai';
 
 export class DetectorIntencao {

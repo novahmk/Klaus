@@ -9,7 +9,7 @@ import {
   GeradorPerguntasOutput
 } from './types';
 import { CARACTERES, PALAVRAS_FECHADAS, SIMILARIDADE_MAXIMA } from './constants';
-import { logger } from '../shared/logger';
+import { logger } from '../../shared/logger';
 
 export class ValidadorPergunta {
   /**
