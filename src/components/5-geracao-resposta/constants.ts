@@ -1,4 +1,9 @@
 // src/components/5-geracao-resposta/constants.ts
+//
+// @deprecated Use ia-config-loader instead.
+// These values are kept as reference defaults only. All runtime configuration
+// is now loaded dynamically from Supabase via obterConfigIA() with automatic
+// fallback to the defaults defined in ia-config-defaults.ts.
 
 export const CRITERIOS_VALIDACAO = {
   MIN_SCORE: 70,
@@ -7,7 +12,7 @@ export const CRITERIOS_VALIDACAO = {
   MAX_LENGTH: 500
 };
 
-/** Parâmetros de geração para conter respostas longas/verbosas. */
+/** @deprecated Use ia-config-loader instead. */
 export const GERACAO_CONFIG = {
   // ~500–600 caracteres: trava física de tamanho na chamada da IA.
   MAX_TOKENS: 200,

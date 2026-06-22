@@ -12,6 +12,7 @@ import { JobProcessor } from './components/8-filas/job-processor';
 import { logger } from './components/shared/logger';
 import { attachGlobalHandlers } from './infra/health';
 import { iniciarConfigLoader } from './modules/config-loader';
+import { iniciarConfigIALoader } from './modules/config-loader/ia-config-loader';
 import { iniciarFollowupScheduler } from './modules/followup/scheduler';
 import { iniciarMetricsCron } from './modules/metrics/cron';
 import {
@@ -60,6 +61,9 @@ async function inicializar(): Promise<void> {
 	if (process.env.CONFIG_LOADER_ENABLED === 'true') {
 		void iniciarConfigLoader();
 	}
+
+	// Config IA Loader: carrega parâmetros de IA do Supabase com fallback automático
+	void iniciarConfigIALoader();
 
 	// Sprint 4: Follow-up scheduler (não-bloqueante, desligável por flag)
 	iniciarFollowupScheduler();
