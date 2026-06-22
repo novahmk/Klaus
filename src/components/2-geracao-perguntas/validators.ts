@@ -8,25 +8,36 @@ import {
   ResultadoSimilaridade,
   GeradorPerguntasOutput
 } from './types';
-import { CARACTERES, PALAVRAS_FECHADAS, SIMILARIDADE_MAXIMA } from './constants';
+import { PALAVRAS_FECHADAS, SIMILARIDADE_MAXIMA } from './constants';
 import { logger } from '../shared/logger';
+
+// Limites padrão de comprimento de pergunta (fallback quando ConfigIA não está disponível).
+// Os valores dinâmicos são injetados via parâmetros de validarCompleto().
+const COMPRIMENTO_PADRAO = { MINIMO: 5, MAXIMO: 500 };
 
 export class ValidadorPergunta {
   /**
-   * Valida uma pergunta completamente
+   * Valida uma pergunta completamente.
+   *
+   * @param pergunta - Texto da pergunta a validar
+   * @param perguntasAnterior - Perguntas já feitas (para checar similaridade)
+   * @param minLength - Comprimento mínimo em caracteres (padrão: cfg_ia_parametros.min_length)
+   * @param maxLength - Comprimento máximo em caracteres (padrão: cfg_ia_parametros.max_length)
    */
   static validarCompleto(
     pergunta: string,
-    perguntasAnterior: string[] = []
+    perguntasAnterior: string[] = [],
+    minLength: number = COMPRIMENTO_PADRAO.MINIMO,
+    maxLength: number = COMPRIMENTO_PADRAO.MAXIMO
   ): ResultadoValidacaoPergunta {
     const erros: string[] = [];
 
     // Validação 1: Tamanho
-    if (pergunta.length < CARACTERES.MINIMO) {
-      erros.push(`Pergunta muito curta (mínimo ${CARACTERES.MINIMO} caracteres, tem ${pergunta.length})`);
+    if (pergunta.length < minLength) {
+      erros.push(`Pergunta muito curta (mínimo ${minLength} caracteres, tem ${pergunta.length})`);
     }
-    if (pergunta.length > CARACTERES.MAXIMO) {
-      erros.push(`Pergunta muito longa (máximo ${CARACTERES.MAXIMO} caracteres, tem ${pergunta.length})`);
+    if (pergunta.length > maxLength) {
+      erros.push(`Pergunta muito longa (máximo ${maxLength} caracteres, tem ${pergunta.length})`);
     }
 
     // Validação 2: Termina com ?
@@ -64,9 +75,17 @@ export class ValidadorPergunta {
   }
 
   /**
-   * Valida resultado da saída
+   * Valida resultado da saída.
+   *
+   * @param resultado - Objeto a validar
+   * @param minLength - Comprimento mínimo de pergunta (cfg_ia_parametros.min_length)
+   * @param maxLength - Comprimento máximo de pergunta (cfg_ia_parametros.max_length)
    */
-  static validarResultado(resultado: unknown): resultado is GeradorPerguntasOutput {
+  static validarResultado(
+    resultado: unknown,
+    minLength?: number,
+    maxLength?: number
+  ): resultado is GeradorPerguntasOutput {
     if (!resultado || typeof resultado !== 'object') {
       return false;
     }
@@ -78,7 +97,7 @@ export class ValidadorPergunta {
       return false;
     }
 
-    const validacaoPergunta = this.validarCompleto(obj.pergunta);
+    const validacaoPergunta = this.validarCompleto(obj.pergunta, [], minLength, maxLength);
     if (!validacaoPergunta.valido) {
       logger.warn(
         { erros: validacaoPergunta.erros },

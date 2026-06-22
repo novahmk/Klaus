@@ -49,12 +49,6 @@ export const CACHE_DEFAULT_TTL = 3600; // 1 hora
  */
 export const GPT_MODEL = 'gpt-4-turbo-preview';
 
-/**
- * Temperatura para respostas do GPT
- */
-export const GPT_TEMPERATURE = 0.3;
-
-/**
- * Máximo de tokens para resposta
- */
-export const GPT_MAX_TOKENS = 500;
+// GPT_TEMPERATURE e GPT_MAX_TOKENS foram removidos.
+// Os valores dinâmicos são fornecidos via ConfigIA (cfg_ia_parametros).
+// Consulte src/modules/ia-config para obter os parâmetros por cliente.

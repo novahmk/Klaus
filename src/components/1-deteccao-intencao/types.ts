@@ -62,6 +62,12 @@ export interface DetectorConfig {
   enableFallback?: boolean;
   enableGpt?: boolean;
   cacheExpireSec?: number;
+  /** Parâmetros dinâmicos de IA por cliente (cfg_ia_parametros) */
+  iaTemperature?: number;
+  /** Máximo de tokens para a chamada de detecção de intenção */
+  iaMaxTokens?: number;
+  /** Confiança mínima para aceitar resultado do GPT (0-100) */
+  iaMinConfianca?: number;
 }
 
 /**
