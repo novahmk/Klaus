@@ -12,7 +12,8 @@ export type EtapaPipeline =
   | 'enfileirada'
   | 'processando_ia'
   | 'enviada'
-  | 'erro';
+  | 'erro'
+  | 'controle_manual';
 
 export interface RegistroEtapa {
   etapa: EtapaPipeline;
