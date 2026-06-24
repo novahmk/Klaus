@@ -101,6 +101,10 @@ export function criarApp(): Express {
 
   attachHealth(app);
 
+  app.get('/health/ping', (_req: Request, res: Response) => {
+    res.json({ status: 'ok' });
+  });
+
   app.get('/webhook', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok', webhook: 'active' });
   });
