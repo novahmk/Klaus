@@ -21,10 +21,17 @@ export class ComponenteGeracao {
     resposta: string;
     confianca: number;
   }> {
-    const cacheKey = `gen:${input.tipoObjecao}:${input.contextoLead.cargo}`;
+    const hashMensagem = Buffer.from(input.objecao ?? '')
+      .toString('base64')
+      .slice(0, 16);
+    const cacheKey = `gen:${input.tipoObjecao}:${input.contextoLead.cargo}:${hashMensagem}`;
 
     const cached = await this.redis.get(cacheKey);
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      logger.info({ cacheKey, hit: true }, 'Comp5: cache hit');
+      return JSON.parse(cached);
+    }
+    logger.info({ cacheKey, hit: false }, 'Comp5: cache miss, chamando LLM');
 
     const promptPadrao = PromptBuilder.build(input);
     const promptDinamicoHabilitado = process.env.DYNAMIC_PROMPT_ENABLED === 'true';
@@ -86,7 +93,7 @@ export class ComponenteGeracao {
 
     const result = { resposta, confianca: score / 100 };
 
-    await this.redis.set(cacheKey, JSON.stringify(result), 'EX', 3600);
+    await this.redis.set(cacheKey, JSON.stringify(result), 'EX', 300);
 
     return result;
   }

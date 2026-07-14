@@ -200,20 +200,26 @@ describe('Componente 5 - ComponenteGeracao.executar', () => {
     expect(args.messages[0]).toMatchObject({ role: 'system' });
   });
 
-  it('deve salvar no cache com TTL de 3600s', async () => {
+  it('deve salvar no cache com TTL de 300s', async () => {
     await componente.executar(criarInput());
 
+    const hash = Buffer.from('Está acima do orçamento.')
+      .toString('base64')
+      .slice(0, 16);
     expect(setSpy).toHaveBeenCalledWith(
-      'gen:PRECO:Diretor Clínico',
+      `gen:PRECO:Diretor Clínico:${hash}`,
       expect.any(String),
       'EX',
-      3600
+      300
     );
   });
 
   it('deve retornar do cache sem chamar GPT', async () => {
+    const hash = Buffer.from('Está acima do orçamento.')
+      .toString('base64')
+      .slice(0, 16);
     store.set(
-      'gen:PRECO:Diretor Clínico',
+      `gen:PRECO:Diretor Clínico:${hash}`,
       JSON.stringify({ resposta: 'cacheada', confianca: 0.9 })
     );
 
