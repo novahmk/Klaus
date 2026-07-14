@@ -5,6 +5,8 @@ import { CircuitBreaker } from './circuit-breaker';
 import { CacheManager } from './cache-manager';
 import { ErrorHandler } from './error-handler';
 import { ORCHESTRATOR_CONFIG } from './constants';
+import { avaliarRegras } from '../../modules/regras-conversa';
+import { logger } from '../../shared/logger';
 
 export class OrquestradorKlaus {
   private circuitBreaker = new CircuitBreaker(
@@ -80,6 +82,26 @@ export class OrquestradorKlaus {
       });
       const scoreQualificacao =
         qualificacao.score ?? qualificacao.scoreQualificacao ?? 0;
+      const estagioAtual: string = qualificacao.estagio ?? 'QUALIFICADO';
+
+      // Sprint 8: motor de regras de conversa dinâmicas (opt-in, nunca
+      // bloqueia o fluxo principal em caso de falha/indisponibilidade).
+      let acaoRecomendada: string | undefined;
+      if (process.env.DYNAMIC_RULES_ENABLED === 'true') {
+        try {
+          const resultadoRegra = await avaliarRegras(mensagem.clienteId, {
+            score: scoreQualificacao,
+            estagio: estagioAtual,
+            tentativas: 0
+          });
+          acaoRecomendada = resultadoRegra?.acao;
+        } catch (erro) {
+          logger.warn(
+            { clienteId: mensagem.clienteId, erro: (erro as Error).message },
+            'Orquestrador: falha ao avaliar regras de conversa dinâmicas'
+          );
+        }
+      }
 
       const resultado: RespostaKlaus = {
         texto: respostaFinal,
@@ -91,7 +113,8 @@ export class OrquestradorKlaus {
         metadata: {
           tempoProcessamento: Date.now() - startTime,
           tokensUsados: 0, // Calculado pelos componentes
-          origem: 'orchestrator_v2'
+          origem: 'orchestrator_v2',
+          ...(acaoRecomendada ? { acaoRecomendada } : {})
         }
       };
 

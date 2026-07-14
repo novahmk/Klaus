@@ -48,3 +48,26 @@ export interface DashboardConfig {
   regras: ConfigRegras;
   ultima_atualizacao: string;
 }
+
+/**
+ * Sprint 7: Pesos de scoring de qualificação (devem somar 1.0).
+ */
+export interface ConfigScoringPesos {
+  intencao: number;
+  engajamento: number;
+  contexto: number;
+  historico: number;
+}
+
+/**
+ * Sprint 7: Configuração dinâmica de scoring/qualificação por cliente.
+ * Carregada da tabela `cfg_scoring` no Supabase.
+ */
+export interface ConfigScoring {
+  cliente_id: string;
+  pesos: ConfigScoringPesos;
+  scores_intencao: Record<string, number>;
+  threshold_handoff: number;
+  threshold_notificacao: number;
+  atualizado_em: string;
+}

@@ -149,6 +149,17 @@ Após aprovação de Sprint 0.5:
 3. Criar `/src/modules/config-loader/` com carga de configurações
 4. Adicionar vars de env para SUPABASE_URL, SUPABASE_SERVICE_KEY, etc.
 
+## 🚀 Ativação em produção dos recursos dinâmicos (Sprints 1/3/7/8)
+
+Além das 13 tabelas originais, o bootstrap também cria `cfg_scoring` (Sprint 7:
+scoring de qualificação dinâmico) e `cfg_regras_conversa` (Sprint 8: regras
+condição→ação avaliadas com whitelist segura, sem eval/new Function).
+
+Para ativar em produção (Railway) os recursos `DYNAMIC_PROMPT_ENABLED`,
+`DYNAMIC_SCORING_ENABLED` e `DYNAMIC_RULES_ENABLED`, rodar também
+`supabase-seed-dynamic.sql` (após o bootstrap) com o `cliente_id` real de produção
+— ver detalhes em `RAILWAY_DEPLOY.md`, seção 8.
+
 ---
 
 ## 🆘 Troubleshooting

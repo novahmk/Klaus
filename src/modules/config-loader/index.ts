@@ -7,10 +7,11 @@
 import { getSupabaseClient, querySupabaseWithTimeout } from '../../lib/supabase';
 import { getGlobalCache } from '../../lib/cache';
 import { logger } from '../../components/shared/logger';
-import { DashboardConfig } from './types';
+import { DashboardConfig, ConfigScoring } from './types';
 import { cachePrompt, construirSystemPrompt } from './prompt-builder';
 
 const CACHE_KEY_CONFIG = (clienteId: string) => `config:${clienteId}`;
+const CACHE_KEY_SCORING = (clienteId: string) => `scoring:${clienteId}`;
 
 /**
  * Carrega configuração completa do dashboard do Supabase.
@@ -96,6 +97,86 @@ export async function obterConfig(
     const systemPrompt = construirSystemPrompt(config);
     cachePrompt(clienteId, systemPrompt);
     logger.info({ clienteId }, 'Config: carregado do Supabase e cacheado');
+  }
+
+  return config;
+}
+
+/**
+ * Sprint 7: Carrega configuração dinâmica de scoring/qualificação do Supabase.
+ * Isolada de `loadConfigFromSupabase` — falha aqui nunca afeta as demais
+ * configurações (persona/objetivo/tom/regras).
+ */
+async function loadConfigScoringFromSupabase(
+  clienteId: string
+): Promise<ConfigScoring | null> {
+  const client = getSupabaseClient();
+  if (!client) {
+    logger.warn({ clienteId }, 'ConfigScoring: Supabase não disponível');
+    return null;
+  }
+
+  try {
+    const result = await querySupabaseWithTimeout(async (supabase) => {
+      const { data, error } = await supabase
+        .from('cfg_scoring')
+        .select('*')
+        .eq('cliente_id', clienteId)
+        .single();
+
+      if (error || !data) {
+        logger.warn(
+          { clienteId, erro: error?.message },
+          'ConfigScoring: falha ao carregar (usando defaults)'
+        );
+        return null;
+      }
+
+      return {
+        cliente_id: clienteId,
+        pesos: {
+          intencao: Number(data.peso_intencao),
+          engajamento: Number(data.peso_engajamento),
+          contexto: Number(data.peso_contexto),
+          historico: Number(data.peso_historico)
+        },
+        scores_intencao: (data.scores_intencao as Record<string, number>) || {},
+        threshold_handoff: Number(data.threshold_handoff),
+        threshold_notificacao: Number(data.threshold_notificacao),
+        atualizado_em: new Date().toISOString()
+      } as ConfigScoring;
+    }, 5000);
+
+    return result;
+  } catch (err) {
+    logger.error(
+      { clienteId, erro: (err as Error).message },
+      'ConfigScoring: erro na carga'
+    );
+    return null;
+  }
+}
+
+/**
+ * Sprint 7: Obtém configuração de scoring do cache ou do Supabase.
+ * Retorna `null` se indisponível — o chamador deve usar os defaults
+ * hardcoded (PESOS/SCORES_INTENCAO do Componente 6) nesse caso.
+ */
+export async function obterConfigScoring(
+  clienteId: string
+): Promise<ConfigScoring | null> {
+  const cacheKey = CACHE_KEY_SCORING(clienteId);
+  const cached = getGlobalCache().get<ConfigScoring>(cacheKey);
+
+  if (cached) {
+    logger.debug({ clienteId }, 'ConfigScoring: retornado do cache');
+    return cached;
+  }
+
+  const config = await loadConfigScoringFromSupabase(clienteId);
+  if (config) {
+    getGlobalCache().set(cacheKey, config);
+    logger.info({ clienteId }, 'ConfigScoring: carregado do Supabase e cacheado');
   }
 
   return config;

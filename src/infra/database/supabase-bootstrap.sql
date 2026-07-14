@@ -157,6 +157,48 @@ CREATE TABLE IF NOT EXISTS cfg_regras (
   atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 6.7 cfg_scoring (Sprint 7: pesos/thresholds de qualificação configuráveis)
+CREATE TABLE IF NOT EXISTS cfg_scoring (
+  cliente_id VARCHAR(50) PRIMARY KEY,
+  peso_intencao NUMERIC(3,2) DEFAULT 0.4,
+  peso_engajamento NUMERIC(3,2) DEFAULT 0.3,
+  peso_contexto NUMERIC(3,2) DEFAULT 0.2,
+  peso_historico NUMERIC(3,2) DEFAULT 0.1,
+  scores_intencao JSONB DEFAULT '{
+    "QUER_AGENDAR": 100,
+    "DEMONSTRA_INTERESSE": 80,
+    "QUER_MAIS_INFO": 60,
+    "TEM_OBJECAO": 40,
+    "NAO_RESPONDEU": 20,
+    "NAO_INTERESSADO": 0
+  }'::jsonb,
+  threshold_handoff INT DEFAULT 90,
+  threshold_notificacao INT DEFAULT 70,
+  atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 6.8 cfg_regras_conversa (Sprint 8: regras condição -> ação, sem eval)
+-- Condições são estruturadas (campo/operador/valor) e avaliadas por um
+-- comparador seguro na aplicação (src/modules/regras-conversa/evaluator.ts),
+-- nunca como código executável. As CHECK constraints abaixo restringem os
+-- valores aceitos ao mesmo whitelist usado no código.
+CREATE TABLE IF NOT EXISTS cfg_regras_conversa (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  cliente_id VARCHAR(50) NOT NULL,
+  nome VARCHAR(150) NOT NULL,
+  condicao_campo VARCHAR(20) NOT NULL CHECK (condicao_campo IN ('score', 'estagio', 'tentativas')),
+  condicao_operador VARCHAR(3) NOT NULL CHECK (condicao_operador IN ('>', '>=', '<', '<=', '==', '!=')),
+  condicao_valor VARCHAR(50) NOT NULL,
+  acao VARCHAR(100) NOT NULL,
+  score_impacto INT DEFAULT 0,
+  ordem INT DEFAULT 0,
+  ativo BOOLEAN DEFAULT TRUE,
+  atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cfg_regras_conversa_cliente
+  ON cfg_regras_conversa(cliente_id, ativo, ordem);
+
 -- ========================================
 -- 7. TABELA DE CONTROLE - Rastreamento de integrações
 -- ========================================
@@ -186,6 +228,8 @@ COMMENT ON TABLE cfg_abordagens IS 'Abordagens e estilos recomendados/bloqueados
 COMMENT ON TABLE cfg_contexto IS 'Contexto de empresa, indústria e mercado';
 COMMENT ON TABLE cfg_tom_voz IS 'Tom de voz customizado por função (executivo, técnico, suporte)';
 COMMENT ON TABLE cfg_regras IS 'Regras, palavras-chave bloqueadas e obrigatórias';
+COMMENT ON TABLE cfg_scoring IS 'Pesos, scores por intenção e thresholds de qualificação configuráveis por cliente';
+COMMENT ON TABLE cfg_regras_conversa IS 'Regras dinâmicas condição->ação avaliadas de forma segura (sem eval) por lead/conversa';
 COMMENT ON TABLE integration_status IS 'Status de integração de módulos do dashboard';
 
 -- ========================================

@@ -21,6 +21,8 @@ DROP TABLE IF EXISTS cfg_abordagens CASCADE;
 DROP TABLE IF EXISTS cfg_contexto CASCADE;
 DROP TABLE IF EXISTS cfg_tom_voz CASCADE;
 DROP TABLE IF EXISTS cfg_regras CASCADE;
+DROP TABLE IF EXISTS cfg_scoring CASCADE;
+DROP TABLE IF EXISTS cfg_regras_conversa CASCADE;
 DROP TABLE IF EXISTS integration_status CASCADE;
 
 -- ========================================

@@ -6,7 +6,7 @@
  * Cobrem a lógica independente de DB/WhatsApp/WebSocket, usando stubs.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Pool } from 'pg';
 import { CalculadorScore } from './calculator';
 import { AnalisadorHistorico } from './analyzer';
@@ -15,6 +15,11 @@ import { NotificadorDashboard, SocketServer } from './dashboard-notifier';
 import { ComponenteQualificacao } from './component';
 import { PESOS, SCORES_INTENCAO } from './constants';
 import { QualificacaoInput } from './types';
+import * as configLoader from '../../modules/config-loader';
+
+vi.mock('../../modules/config-loader', () => ({
+  obterConfigScoring: vi.fn()
+}));
 
 function criarInput(overrides: Partial<QualificacaoInput> = {}): QualificacaoInput {
   return {
@@ -91,6 +96,32 @@ describe('Componente 6 - CalculadorScore', () => {
     expect(agendar).toBeGreaterThan(objecao);
     expect(SCORES_INTENCAO['QUER_AGENDAR']).toBe(100);
     expect(SCORES_INTENCAO['NAO_INTERESSADO']).toBe(0);
+  });
+
+  it('Sprint 7: deve aceitar pesos e scores de intenção customizados (override dinâmico)', () => {
+    const pesosCustom = { INTENCAO: 0.7, ENGAJAMENTO: 0.1, CONTEXTO: 0.1, HISTORICO: 0.1 };
+    const scoresCustom = { QUER_AGENDAR: 50 };
+
+    const scorePadrao = calc.calcular(criarInput());
+    const scoreCustom = calc.calcular(criarInput(), pesosCustom, scoresCustom);
+
+    const esperadoCustom =
+      50 * pesosCustom.INTENCAO +
+      100 * pesosCustom.ENGAJAMENTO +
+      90 * pesosCustom.CONTEXTO +
+      80 * pesosCustom.HISTORICO;
+
+    expect(scoreCustom).toBeCloseTo(esperadoCustom, 5);
+    expect(scoreCustom).not.toBeCloseTo(scorePadrao, 5);
+  });
+
+  it('Sprint 7: sem argumentos extras deve continuar usando PESOS/SCORES_INTENCAO padrão', () => {
+    const esperado =
+      100 * PESOS.INTENCAO +
+      100 * PESOS.ENGAJAMENTO +
+      90 * PESOS.CONTEXTO +
+      80 * PESOS.HISTORICO;
+    expect(calc.calcular(criarInput())).toBeCloseTo(esperado, 5);
   });
 });
 
@@ -204,5 +235,54 @@ describe('Componente 6 - ComponenteQualificacao.executar', () => {
   it('deve calcular prioridade como ceil(score/10)', async () => {
     const resultado = await componente.executar(criarInput());
     expect(resultado.prioridade).toBe(Math.ceil(resultado.scoreQualificacao / 10));
+  });
+
+  describe('Sprint 7: scoring dinâmico via Supabase (DYNAMIC_SCORING_ENABLED)', () => {
+    const obterConfigScoringMock = vi.mocked(configLoader.obterConfigScoring);
+
+    afterEach(() => {
+      delete process.env.DYNAMIC_SCORING_ENABLED;
+      obterConfigScoringMock.mockReset();
+    });
+
+    it('deve ignorar config dinâmica quando a flag está desligada', async () => {
+      process.env.DYNAMIC_SCORING_ENABLED = 'false';
+      await componente.executar(criarInput());
+      expect(obterConfigScoringMock).not.toHaveBeenCalled();
+    });
+
+    it('deve usar pesos/scores/thresholds customizados quando a flag está ligada', async () => {
+      process.env.DYNAMIC_SCORING_ENABLED = 'true';
+      obterConfigScoringMock.mockResolvedValue({
+        cliente_id: 'cliente-1',
+        pesos: { intencao: 0.7, engajamento: 0.1, contexto: 0.1, historico: 0.1 },
+        scores_intencao: { QUER_AGENDAR: 50 },
+        threshold_handoff: 95,
+        threshold_notificacao: 60,
+        atualizado_em: new Date().toISOString()
+      });
+
+      const resultado = await componente.executar(criarInput());
+
+      const esperado =
+        50 * 0.7 + 100 * 0.1 + 90 * 0.1 + 80 * 0.1;
+      expect(resultado.scoreQualificacao).toBeCloseTo(esperado, 5);
+      expect(resultado.estagio).toBe('QUALIFICADO'); // esperado < threshold_handoff=95
+      expect(whatsappEnviar).toHaveBeenCalledOnce(); // esperado >= threshold_notificacao=60
+    });
+
+    it('deve cair nos defaults quando obterConfigScoring retorna null', async () => {
+      process.env.DYNAMIC_SCORING_ENABLED = 'true';
+      obterConfigScoringMock.mockResolvedValue(null);
+
+      const resultado = await componente.executar(criarInput());
+
+      const esperado =
+        100 * PESOS.INTENCAO +
+        100 * PESOS.ENGAJAMENTO +
+        90 * PESOS.CONTEXTO +
+        80 * PESOS.HISTORICO;
+      expect(resultado.scoreQualificacao).toBeCloseTo(esperado, 5);
+    });
   });
 });

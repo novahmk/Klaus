@@ -29,6 +29,8 @@ export interface RespostaKlaus {
     tempoProcessamento: number;
     tokensUsados: number;
     origem: string;
+    /** Sprint 8: ação recomendada pelo motor de regras de conversa dinâmicas (se habilitado e alguma regra bater). */
+    acaoRecomendada?: string;
   };
 }
 

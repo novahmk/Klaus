@@ -6,7 +6,7 @@
  * Cobrem a lógica independente de DB/componentes reais, usando stubs.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type Redis from 'ioredis';
 import { EstadoConversa, MensagemLead } from './types';
 import { StateMachine } from './state-machine';
@@ -15,6 +15,11 @@ import { ErrorHandler } from './error-handler';
 import { CacheManager } from './cache-manager';
 import { OrquestradorKlaus } from './orchestrator';
 import { ORCHESTRATOR_CONFIG } from './constants';
+import * as regrasConversa from '../../modules/regras-conversa';
+
+vi.mock('../../modules/regras-conversa', () => ({
+  avaliarRegras: vi.fn()
+}));
 
 describe('Componente 7 - StateMachine', () => {
   let sm: StateMachine;
@@ -275,5 +280,49 @@ describe('Componente 7 - OrquestradorKlaus.processar', () => {
     expect(resposta.confianca).toBe(0);
     expect(resposta.metadata.origem).toBe('fallback');
     expect(resposta.texto.length).toBeGreaterThan(0);
+  });
+
+  describe('Sprint 8: regras de conversa dinâmicas (DYNAMIC_RULES_ENABLED)', () => {
+    const avaliarRegrasMock = vi.mocked(regrasConversa.avaliarRegras);
+
+    afterEach(() => {
+      delete process.env.DYNAMIC_RULES_ENABLED;
+      avaliarRegrasMock.mockReset();
+    });
+
+    it('não deve avaliar regras quando a flag está desligada (default)', async () => {
+      const resposta = await orquestrador.processar(mensagem);
+      expect(avaliarRegrasMock).not.toHaveBeenCalled();
+      expect(resposta.metadata.acaoRecomendada).toBeUndefined();
+    });
+
+    it('deve anexar acaoRecomendada quando a flag está ligada e uma regra corresponde', async () => {
+      process.env.DYNAMIC_RULES_ENABLED = 'true';
+      avaliarRegrasMock.mockResolvedValue({
+        regra: 'Lead quente',
+        acao: 'agendar_demo',
+        scoreImpacto: 0,
+        ordem: 1
+      });
+
+      const resposta = await orquestrador.processar(mensagem);
+
+      expect(avaliarRegrasMock).toHaveBeenCalledWith('cliente-123', {
+        score: 85,
+        estagio: 'QUALIFICADO',
+        tentativas: 0
+      });
+      expect(resposta.metadata.acaoRecomendada).toBe('agendar_demo');
+    });
+
+    it('não deve quebrar o fluxo quando avaliarRegras falha', async () => {
+      process.env.DYNAMIC_RULES_ENABLED = 'true';
+      avaliarRegrasMock.mockRejectedValue(new Error('supabase indisponível'));
+
+      const resposta = await orquestrador.processar(mensagem);
+
+      expect(resposta.texto).toBe('Resposta gerada.');
+      expect(resposta.metadata.acaoRecomendada).toBeUndefined();
+    });
   });
 });

@@ -117,3 +117,46 @@ Falha OpenAI:
 - Usar apenas secrets do Railway para chaves de API.
 - Configurar INTERNAL_API_KEY para proteger endpoints internos de prospeccao.
 - Rotacionar imediatamente qualquer chave exposta.
+
+## 8) Ativacao de recursos dinamicos (prompt, scoring e regras via Supabase)
+
+Esses recursos ja existem no codigo (feature flags, default desligadas). Nao criar
+novos arquivos/rotas para isso — apenas popular dados no Supabase e ligar as flags.
+
+### 8.1 Pre-requisito: preparar dados no Supabase
+
+1. Rodar `src/infra/database/supabase-bootstrap.sql` no SQL Editor do Supabase
+   (se as tabelas `cfg_*` ainda nao existirem).
+2. Rodar `src/infra/database/supabase-seed-dynamic.sql` no SQL Editor, ajustando
+   o `cliente_id` (`'default'` por padrao) para o mesmo valor de `DEFAULT_CLIENTE_ID`
+   usado no Railway. Preencher os campos `TODO:` de `cfg_persona`/`cfg_objetivo`/
+   `cfg_contexto`/`cfg_abordagens` com o conteudo real do negocio antes de ativar
+   `DYNAMIC_PROMPT_ENABLED`.
+3. `cfg_regras_conversa` pode ficar vazia com seguranca (nenhuma acao e recomendada
+   nesse caso). As condicoes SEMPRE sao avaliadas por whitelist estruturada
+   (`src/modules/regras-conversa/evaluator.ts`) — nunca usar `eval`/`new Function`
+   para regras vindas do banco.
+
+### 8.2 Variaveis a adicionar no Railway (alem das da secao 3)
+
+- SUPABASE_ENABLED=true
+- CONFIG_LOADER_ENABLED=true
+- CONFIG_CACHE_TTL_MS=300000
+- DYNAMIC_PROMPT_ENABLED=true
+- DYNAMIC_SCORING_ENABLED=true
+- DYNAMIC_RULES_ENABLED=true
+- HEALTH_CHECK_SUPABASE_ENABLED=true (opcional, expoe check do Supabase em /health)
+
+### 8.3 Validacao pos-deploy
+
+1. Logs de subida devem mostrar `ConfigLoader: refresh periodico iniciado` e nenhum
+   erro de conexao com o Supabase.
+2. `GET /health` deve retornar status ok (incluindo Supabase, se o check estiver ligado).
+3. Enviar uma mensagem de teste via WhatsApp e conferir nos logs:
+   - Componente 5 usando prompt dinamico (nao vazio).
+   - Componente 6 aplicando pesos/thresholds de `cfg_scoring`.
+   - Componente 7 preenchendo `metadata.acaoRecomendada` quando uma regra de
+     `cfg_regras_conversa` bater a condicao.
+4. Rollback rapido: voltar qualquer uma das flags `DYNAMIC_*`/`CONFIG_LOADER_ENABLED`
+   para `false` no Railway — os componentes tem fallback para os valores hardcoded
+   e nunca ficam bloqueados por falha do Supabase.
