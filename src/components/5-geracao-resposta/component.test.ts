@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import type { OpenAI } from 'openai';
 import type { Pool } from 'pg';
 import type Redis from 'ioredis';
@@ -126,9 +127,9 @@ describe('Componente 5 - PromptBuilder', () => {
 describe('Componente 5 - ComponenteGeracao.executar', () => {
   let store: Map<string, string>;
   let redisStub: Redis;
-  let getSpy: ReturnType<typeof vi.fn>;
-  let setSpy: ReturnType<typeof vi.fn>;
-  let createSpy: ReturnType<typeof vi.fn>;
+  let getSpy: Mock<any[], any>;
+  let setSpy: Mock<any[], any>;
+  let createSpy: Mock<any[], any>;
   let openaiStub: OpenAI;
   let componente: ComponenteGeracao;
 
