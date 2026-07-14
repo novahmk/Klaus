@@ -5,7 +5,7 @@ import { getPool } from '../../infra/database';
 import { DetectorIntencao, Intencao } from '../../components/1-deteccao-intencao';
 import { BuscadorBanco } from '../../components/3-busca-banco';
 import { ComponenteGeracao, TipoObjecao } from '../../components/5-geracao-resposta';
-import { CalculadorScore } from '../../components/6-qualificacao';
+import { CalculadorScore, PESOS, SCORES_INTENCAO } from '../../components/6-qualificacao';
 import {
   CacheManager,
   MensagemLead,
@@ -13,6 +13,9 @@ import {
   StateMachine
 } from '../../components/7-orquestracao';
 import { OpenAIClient, getOpenAIConfig } from '../openai';
+import { contarMensagensLead } from '../../modules/inbound/supabase-gateway';
+import { obterConfigScoring } from '../../modules/config-loader';
+import { logger } from '../../shared/logger';
 
 interface BuscaAdapterInput {
   texto: string;
@@ -145,21 +148,67 @@ export function criarOrquestradorWasender(): OrquestradorKlaus {
 
   const calculador = new CalculadorScore();
   const comp6Adapter = {
-    analisar(input: QualificacaoAdapterInput): { score: number } {
-      const score = calculador.calcular({
-        clienteId: input.clienteId,
-        leadId: input.leadId,
-        intencao: input.intencao,
-        historico: [{ remetente: 'lead', texto: input.texto }],
-        contextoLead: {
-          nome: String(input.metadata?.pushName || 'Lead'),
-          telefone: String(input.metadata?.from || input.leadId),
-          email: String(input.metadata?.email || ''),
-          cargo: String(input.metadata?.cargo || '')
-        }
-      });
+    async analisar(
+      input: QualificacaoAdapterInput
+    ): Promise<{ score: number; estagio: string }> {
+      // Engajamento real: quanto mais mensagens o lead já trocou, maior o
+      // score. Fallback seguro para 1 quando Supabase indisponível.
+      const numMensagens = await contarMensagensLead(input.leadId);
+      const historico = Array.from(
+        { length: Math.max(numMensagens, 1) },
+        () => ({ remetente: 'lead', texto: '' })
+      );
 
-      return { score };
+      // Sprint 7: scoring dinâmico via dashboard (cfg_scoring). Opt-in por
+      // env var; nunca bloqueia — cai nos defaults hardcoded em caso de falha.
+      // Notificação WhatsApp/dashboard NÃO é acionada aqui (fica isolada do
+      // fluxo do orquestrador para evitar dependência da tabela legada).
+      let pesos = PESOS;
+      let scoresIntencao = SCORES_INTENCAO;
+      let thresholdHandoff = 90;
+
+      if (process.env.DYNAMIC_SCORING_ENABLED === 'true') {
+        try {
+          const cfg = await obterConfigScoring(input.clienteId);
+          if (cfg) {
+            pesos = {
+              INTENCAO: cfg.pesos.intencao,
+              ENGAJAMENTO: cfg.pesos.engajamento,
+              CONTEXTO: cfg.pesos.contexto,
+              HISTORICO: cfg.pesos.historico
+            };
+            scoresIntencao = cfg.scores_intencao;
+            thresholdHandoff = cfg.threshold_handoff;
+          }
+        } catch (erro) {
+          logger.warn(
+            { clienteId: input.clienteId, erro: (erro as Error).message },
+            'Qualificação: falha ao obter scoring dinâmico, usando defaults'
+          );
+        }
+      }
+
+      const score = calculador.calcular(
+        {
+          clienteId: input.clienteId,
+          leadId: input.leadId,
+          intencao: input.intencao,
+          historico,
+          contextoLead: {
+            nome: String(input.metadata?.pushName || 'Lead'),
+            telefone: String(input.metadata?.from || input.leadId),
+            email: String(input.metadata?.email || ''),
+            cargo: String(input.metadata?.cargo || '')
+          }
+        },
+        pesos,
+        scoresIntencao
+      );
+
+      const estagio =
+        score >= thresholdHandoff ? 'PRONTO_PARA_HANDOFF' : 'QUALIFICADO';
+
+      return { score, estagio };
     }
   };
 

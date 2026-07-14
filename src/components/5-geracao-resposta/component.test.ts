@@ -181,6 +181,25 @@ describe('Componente 5 - ComponenteGeracao.executar', () => {
     expect(resultado.confianca).toBeLessThanOrEqual(1);
   });
 
+  it('deve enviar a mensagem do lead como role user à IA', async () => {
+    await componente.executar(criarInput());
+
+    const args = createSpy.mock.calls[0][0];
+    expect(args.messages[0]).toMatchObject({ role: 'system' });
+    expect(args.messages).toContainEqual({
+      role: 'user',
+      content: 'Está acima do orçamento.'
+    });
+  });
+
+  it('não deve adicionar mensagem user quando a objeção está vazia', async () => {
+    await componente.executar(criarInput({ objecao: '   ' }));
+
+    const args = createSpy.mock.calls[0][0];
+    expect(args.messages).toHaveLength(1);
+    expect(args.messages[0]).toMatchObject({ role: 'system' });
+  });
+
   it('deve salvar no cache com TTL de 3600s', async () => {
     await componente.executar(criarInput());
 

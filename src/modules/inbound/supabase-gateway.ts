@@ -157,3 +157,48 @@ export async function atualizarUltimaInteracaoSupabase(input: {
     );
   }
 }
+
+/**
+ * Conta o total de mensagens já trocadas por um lead (tabela `mensagens`).
+ * Usado no cálculo de engajamento da qualificação (Componente 6): quanto mais
+ * o lead conversa, maior o engajamento e, consequentemente, o score.
+ *
+ * Resiliente: nunca lança. Se o Supabase estiver desabilitado/indisponível ou
+ * não houver registros, retorna 1 (comportamento equivalente ao legado, em que
+ * apenas a mensagem atual era considerada).
+ */
+export async function contarMensagensLead(leadId: string): Promise<number> {
+  if (!isSupabaseEnabled()) return 1;
+
+  const client = getSupabaseServiceClient();
+  if (!client) return 1;
+
+  try {
+    const resultado = await Promise.race([
+      client
+        .from('mensagens')
+        .select('*', { count: 'exact', head: true })
+        .eq('lead_id', leadId),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('timeout ao contar mensagens no Supabase')),
+          2500
+        )
+      )
+    ]);
+
+    const { count, error } = resultado as {
+      count: number | null;
+      error: unknown;
+    };
+
+    if (error || !count || count < 1) return 1;
+    return count;
+  } catch (err) {
+    logger.warn(
+      { leadId, erro: (err as Error).message },
+      'Qualificação Supabase: falha ao contar mensagens (usando fallback 1)'
+    );
+    return 1;
+  }
+}

@@ -3,14 +3,14 @@
 export const CRITERIOS_VALIDACAO = {
   MIN_SCORE: 70,
   MAX_RETRIES: 3,
-  MIN_LENGTH: 150,
+  MIN_LENGTH: 80,
   MAX_LENGTH: 500
 };
 
 /** Parâmetros de geração para conter respostas longas/verbosas. */
 export const GERACAO_CONFIG = {
-  // ~500–600 caracteres: trava física de tamanho na chamada da IA.
-  MAX_TOKENS: 200,
+  // ~350–420 caracteres: trava física de tamanho na chamada da IA.
+  MAX_TOKENS: 140,
   // Menor temperatura = respostas mais diretas e menos prolixas.
   TEMPERATURE: 0.4
 };

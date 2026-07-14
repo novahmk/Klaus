@@ -33,12 +33,22 @@ export class ComponenteGeracao {
       : '';
     const prompt = promptDinamico || promptPadrao;
 
+    // O system prompt (fixo ou dinâmico) define persona/regras. A mensagem do
+    // lead precisa ir como role 'user' — caso contrário, em modo dinâmico o
+    // prompt-builder não inclui o texto do lead e a IA responde "no vazio".
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: prompt }
+    ];
+    if (input.objecao && input.objecao.trim().length > 0) {
+      messages.push({ role: 'user', content: input.objecao });
+    }
+
     const inicio = Date.now();
     let completion;
     try {
       completion = await this.openai.chat.completions.create({
         model: getOpenAIConfig().CHAT_MODEL,
-        messages: [{ role: 'system', content: prompt }],
+        messages,
         temperature: GERACAO_CONFIG.TEMPERATURE,
         max_tokens: GERACAO_CONFIG.MAX_TOKENS
       });
