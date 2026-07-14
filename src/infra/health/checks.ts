@@ -3,6 +3,7 @@ import { QueueManager } from '../../components/8-filas/queue-manager';
 import { query } from '../database/pool';
 import { wasenderConfig } from '../../integrations/wasender/config';
 import { querySupabaseWithTimeout } from '../../lib/supabase';
+import { isValidatorOnlyService } from '../runtime/service-mode';
 import { HealthCheck } from './types';
 
 const openAiApiKey = process.env.OPENAI_API_KEY || '';
@@ -27,6 +28,10 @@ export const pingChecks: HealthCheck[] = [
     name: 'redis',
     timeout: 3_000,
     fn: async () => {
+      if (isValidatorOnlyService()) {
+        return { skipped: true, detail: 'SERVICE_MODE=validator-only' };
+      }
+
       if (wasenderConfig.PROCESSING_MODE !== 'queue') {
         return { skipped: true, detail: 'PROCESSING_MODE=direct' };
       }
@@ -55,6 +60,10 @@ export const pingChecks: HealthCheck[] = [
     name: 'webhook-inbound',
     timeout: 5_000,
     fn: async () => {
+      if (isValidatorOnlyService()) {
+        return { skipped: true, detail: 'SERVICE_MODE=validator-only' };
+      }
+
       if (!wasenderConfig.TOKEN) {
         throw new Error('WASender token ausente');
       }

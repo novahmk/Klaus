@@ -36,6 +36,7 @@ import {
 } from '../../modules/prospeccao/service';
 import { logger } from '../../components/shared/logger';
 import { attach as attachHealth } from '../../infra/health';
+import { isValidatorOnlyService } from '../../infra/runtime/service-mode';
 
 const EVENTOS_IGNORADOS = new Set([
   'messages.upsert',
@@ -80,10 +81,15 @@ function authorizeInternal(req: Request, res: Response): boolean {
   return false;
 }
 
+type CriarAppOptions = {
+  validatorOnly?: boolean;
+};
+
 /**
  * Cria o app Express com as rotas do WASenderAPI (não inicia o servidor).
  */
-export function criarApp(): Express {
+export function criarApp(options: CriarAppOptions = {}): Express {
+  const validatorOnly = options.validatorOnly ?? isValidatorOnlyService();
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
@@ -91,7 +97,8 @@ export function criarApp(): Express {
   app.get('/', (_req: Request, res: Response) => {
     res.json({
       status: 'ok',
-      service: 'WASender Core',
+      service: validatorOnly ? 'Validator Core' : 'WASender Core',
+      mode: validatorOnly ? 'validator-only' : 'wasender',
       wasenderApi: Boolean(wasenderConfig.TOKEN),
       webhookSecret: Boolean(wasenderConfig.WEBHOOK_SECRET),
       openai: Boolean(wasenderConfig.OPENAI_API_KEY),
@@ -101,156 +108,157 @@ export function criarApp(): Express {
 
   attachHealth(app);
 
-  app.get('/webhook', (_req: Request, res: Response) => {
-    res.status(200).json({ status: 'ok', webhook: 'active' });
-  });
+  if (!validatorOnly) {
+    app.get('/webhook', (_req: Request, res: Response) => {
+      res.status(200).json({ status: 'ok', webhook: 'active' });
+    });
 
-  app.get('/api/prospeccao/contract', (req: Request, res: Response) => {
-    if (!authorizeInternal(req, res)) return;
-    res.status(200).json(getProspeccaoContract());
-  });
+    app.get('/api/prospeccao/contract', (req: Request, res: Response) => {
+      if (!authorizeInternal(req, res)) return;
+      res.status(200).json(getProspeccaoContract());
+    });
 
-  app.post('/api/prospeccao/manual-disparos', async (req: Request, res: Response) => {
-    if (!authorizeInternal(req, res)) return;
+    app.post('/api/prospeccao/manual-disparos', async (req: Request, res: Response) => {
+      if (!authorizeInternal(req, res)) return;
 
-    let normalized;
-    try {
-      normalized = normalizeManualDispatchRequest(req.body);
-    } catch (error) {
-      return res.status(400).json({
+      let normalized;
+      try {
+        normalized = normalizeManualDispatchRequest(req.body);
+      } catch (error) {
+        return res.status(400).json({
         accepted: false,
         error: (error as Error).message
       });
-    }
+      }
 
-    const queueManager = QueueManager.getInstance();
-    const results = await Promise.all(
-      normalized.itens.map(async (item) => {
-        try {
-          const job = await queueManager.addJob(
-            QueueName.OUTBOUND_RESPONSES,
-            {
+      const queueManager = QueueManager.getInstance();
+      const results = await Promise.all(
+        normalized.itens.map(async (item) => {
+          try {
+            const job = await queueManager.addJob(
+              QueueName.OUTBOUND_RESPONSES,
+              {
+                leadId: item.leadId,
+                clienteId: normalized.clienteId,
+                mensagem: item.mensagem,
+                timestamp: new Date(),
+                metadata: {
+                  ...item.metadata,
+                  to: item.telefoneE164,
+                  pushName: item.nome,
+                  origem: normalized.origem,
+                  correlationId: normalized.correlationId,
+                  messageId: `${normalized.correlationId}-${item.index}`
+                }
+              },
+              1
+            );
+
+            return {
+              index: item.index,
               leadId: item.leadId,
-              clienteId: normalized.clienteId,
-              mensagem: item.mensagem,
-              timestamp: new Date(),
-              metadata: {
-                ...item.metadata,
-                to: item.telefoneE164,
-                pushName: item.nome,
-                origem: normalized.origem,
-                correlationId: normalized.correlationId,
-                messageId: `${normalized.correlationId}-${item.index}`
-              }
-            },
-            1
-          );
+              to: item.telefoneE164,
+              status: 'enqueued',
+              jobId: job.id
+            };
+          } catch (error) {
+            return {
+              index: item.index,
+              leadId: item.leadId,
+              to: item.telefoneE164,
+              status: 'failed',
+              error: (error as Error).message
+            };
+          }
+        })
+      );
 
-          return {
-            index: item.index,
-            leadId: item.leadId,
-            to: item.telefoneE164,
-            status: 'enqueued',
-            jobId: job.id
-          };
-        } catch (error) {
-          return {
-            index: item.index,
-            leadId: item.leadId,
-            to: item.telefoneE164,
-            status: 'failed',
-            error: (error as Error).message
-          };
-        }
-      })
-    );
-
-    const enqueued = results.filter((r) => r.status === 'enqueued').length;
-    const failed = results.length - enqueued;
-
-    logger.info(
-      {
-        clienteId: normalized.clienteId,
-        origem: normalized.origem,
-        correlationId: normalized.correlationId,
-        total: normalized.itens.length,
-        enqueued,
-        failed
-      },
-      'Prospeccao: disparo manual em lote recebido'
-    );
-
-    await registrarAuditoriaDisparo({
-      correlationId: normalized.correlationId,
-      clienteId: normalized.clienteId,
-      origem: normalized.origem,
-      total: normalized.itens.length,
-      enqueued,
-      failed,
-      payload: req.body,
-      resultado: results
-    });
-
-    return res.status(202).json({
-      accepted: failed < normalized.itens.length,
-      total: normalized.itens.length,
-      enqueued,
-      failed,
-      correlationId: normalized.correlationId,
-      results
-    });
-  });
-
-  app.post('/api/prospeccao/check-duplicados', async (req: Request, res: Response) => {
-    if (!authorizeInternal(req, res)) return;
-
-    const telefones = Array.isArray(req.body?.telefones)
-      ? (req.body.telefones as string[])
-      : [];
-
-    if (!telefones.length) {
-      return res.status(400).json({
-        error: 'telefones deve conter ao menos 1 item'
-      });
-    }
-
-    const resultado = await checkDuplicateLeads({ telefones });
-    return res.status(200).json(resultado);
-  });
-
-  app.post('/api/prospeccao/importar-leads', async (req: Request, res: Response) => {
-    if (!authorizeInternal(req, res)) return;
-
-    try {
-      const resultado = await importLeadsBulk({
-        clienteId: req.body?.clienteId,
-        origem: req.body?.origem,
-        correlationId: req.body?.correlationId,
-        itens: req.body?.itens
-      });
+      const enqueued = results.filter((r) => r.status === 'enqueued').length;
+      const failed = results.length - enqueued;
 
       logger.info(
         {
-          correlationId: resultado.correlationId,
-          total: resultado.total,
-          imported: resultado.imported,
-          duplicatesInFile: resultado.duplicatesInFile,
-          duplicatesInDb: resultado.duplicatesInDb,
-          invalid: resultado.invalid
+          clienteId: normalized.clienteId,
+          origem: normalized.origem,
+          correlationId: normalized.correlationId,
+          total: normalized.itens.length,
+          enqueued,
+          failed
         },
-        'Prospeccao: importacao CSV processada'
+        'Prospeccao: disparo manual em lote recebido'
       );
 
-      return res.status(202).json(resultado);
-    } catch (error) {
-      return res.status(400).json({
-        accepted: false,
-        error: (error as Error).message
+      await registrarAuditoriaDisparo({
+        correlationId: normalized.correlationId,
+        clienteId: normalized.clienteId,
+        origem: normalized.origem,
+        total: normalized.itens.length,
+        enqueued,
+        failed,
+        payload: req.body,
+        resultado: results
       });
-    }
-  });
 
-  app.post('/webhook', async (req: Request, res: Response) => {
+      return res.status(202).json({
+        accepted: failed < normalized.itens.length,
+        total: normalized.itens.length,
+        enqueued,
+        failed,
+        correlationId: normalized.correlationId,
+        results
+      });
+    });
+
+    app.post('/api/prospeccao/check-duplicados', async (req: Request, res: Response) => {
+      if (!authorizeInternal(req, res)) return;
+
+      const telefones = Array.isArray(req.body?.telefones)
+        ? (req.body.telefones as string[])
+        : [];
+
+      if (!telefones.length) {
+        return res.status(400).json({
+          error: 'telefones deve conter ao menos 1 item'
+        });
+      }
+
+      const resultado = await checkDuplicateLeads({ telefones });
+      return res.status(200).json(resultado);
+    });
+
+    app.post('/api/prospeccao/importar-leads', async (req: Request, res: Response) => {
+      if (!authorizeInternal(req, res)) return;
+
+      try {
+        const resultado = await importLeadsBulk({
+          clienteId: req.body?.clienteId,
+          origem: req.body?.origem,
+          correlationId: req.body?.correlationId,
+          itens: req.body?.itens
+        });
+
+        logger.info(
+          {
+            correlationId: resultado.correlationId,
+            total: resultado.total,
+            imported: resultado.imported,
+            duplicatesInFile: resultado.duplicatesInFile,
+            duplicatesInDb: resultado.duplicatesInDb,
+            invalid: resultado.invalid
+          },
+          'Prospeccao: importacao CSV processada'
+        );
+
+        return res.status(202).json(resultado);
+      } catch (error) {
+        return res.status(400).json({
+          accepted: false,
+          error: (error as Error).message
+        });
+      }
+    });
+
+    app.post('/webhook', async (req: Request, res: Response) => {
     const reqId = Date.now().toString(36);
 
     // P1: Content-Type
@@ -453,7 +461,8 @@ export function criarApp(): Express {
         'Webhook: erro no processamento'
       );
     }
-  });
+    });
+  }
 
   // Fallback de erro
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
@@ -467,8 +476,9 @@ export function criarApp(): Express {
 /**
  * Inicia o servidor HTTP (chamar apenas no entrypoint).
  */
-export function iniciarServidor(): void {
-  const app = criarApp();
+export function iniciarServidor(options: CriarAppOptions = {}): void {
+  const app = criarApp(options);
+  const validatorOnly = options.validatorOnly ?? isValidatorOnlyService();
   const server = app.listen(wasenderConfig.PORT, '0.0.0.0', () => {
     logger.info(
       {
@@ -476,9 +486,10 @@ export function iniciarServidor(): void {
         baseUrl: wasenderConfig.BASE_URL,
         mode: wasenderConfig.PROCESSING_MODE,
         token: Boolean(wasenderConfig.TOKEN),
-        openai: Boolean(wasenderConfig.OPENAI_API_KEY)
+        openai: Boolean(wasenderConfig.OPENAI_API_KEY),
+        validatorOnly
       },
-      'WASender Core iniciado'
+      validatorOnly ? 'Validator Core iniciado' : 'WASender Core iniciado'
     );
   });
 

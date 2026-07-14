@@ -7,7 +7,8 @@ import { OrquestradorKlaus } from '../7-orquestracao/orchestrator';
 import { Intencao } from '../1-deteccao-intencao/types';
 import { registrarEtapa } from '../../infra/memory';
 import { dispatchOutboundMessage } from '../../modules/outbound/dispatcher';
-import { logger } from '../shared/logger';
+import { isValidatorOnlyService } from '../../infra/runtime/service-mode';
+import { logger } from '../../shared/logger';
 
 function messageIdDe(job: Job<KlausJobPayload>): string | undefined {
   const id = job.data.metadata?.messageId;
@@ -185,6 +186,19 @@ export class JobProcessor {
     const to =
       String(job.data.metadata?.to || job.data.metadata?.from || '') ||
       job.data.leadId;
+
+    if (isValidatorOnlyService()) {
+      logger.info(
+        { leadId: job.data.leadId, jobId: job.id, to },
+        'OUTBOUND: ignorado em SERVICE_MODE=validator-only'
+      );
+
+      return {
+        success: true,
+        respostaGerada: job.data.mensagem,
+        processingTime: Date.now() - startTime
+      };
+    }
 
     try {
       await dispatchOutboundMessage({
