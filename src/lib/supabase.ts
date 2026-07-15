@@ -53,6 +53,15 @@ export function getSupabaseClient(): SupabaseClient | null {
   const url = process.env.SUPABASE_URL || '';
   const chave = resolverCredencial('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY');
 
+  // DEBUG TEMPORÁRIO: valores exatos das variáveis de ambiente (remover após diagnóstico)
+  console.log('[DEBUG SUPABASE] URL:', JSON.stringify(process.env.SUPABASE_URL));
+  console.log('[DEBUG SUPABASE] ANON_KEY:', process.env.SUPABASE_ANON_KEY ? `presente (${process.env.SUPABASE_ANON_KEY.length} chars)` : 'AUSENTE');
+  console.log('[DEBUG SUPABASE] ANON_KEY fallback (PUBLISHABLE):', process.env.SUPABASE_PUBLISHABLE_KEY ? 'presente' : 'AUSENTE');
+  console.log('[DEBUG SUPABASE] SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? `presente (${process.env.SUPABASE_SERVICE_KEY.length} chars)` : 'AUSENTE');
+  console.log('[DEBUG SUPABASE] SERVICE_KEY fallback (SECRET):', process.env.SUPABASE_SECRET_KEY ? 'presente' : 'AUSENTE');
+  console.log('[DEBUG SUPABASE] SUPABASE_ENABLED:', JSON.stringify(process.env.SUPABASE_ENABLED));
+  console.log('[DEBUG SUPABASE] CONFIG_LOADER_ENABLED:', JSON.stringify(process.env.CONFIG_LOADER_ENABLED));
+
   // Configs não disponíveis
   if (!url || !chave.valor) {
     logger.warn(
