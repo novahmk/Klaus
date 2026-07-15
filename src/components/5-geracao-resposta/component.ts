@@ -40,6 +40,12 @@ export class ComponenteGeracao {
       : '';
     const prompt = promptDinamico || promptPadrao;
 
+    // DEBUG TEMPORÁRIO: investigar por que o bot responde com prompt genérico.
+    // Remover após diagnóstico.
+    console.log('[DEBUG PROMPT] DYNAMIC_PROMPT_ENABLED =', JSON.stringify(process.env.DYNAMIC_PROMPT_ENABLED));
+    console.log('[DEBUG PROMPT] Prompt sendo usado (primeiros 500 chars):', prompt?.substring(0, 500));
+    console.log('[DEBUG PROMPT] Prompt source:', prompt?.includes('Klaus') ? 'DINÂMICO' : 'FALLBACK/DEFAULT');
+
     // O system prompt (fixo ou dinâmico) define persona/regras. A mensagem do
     // lead precisa ir como role 'user' — caso contrário, em modo dinâmico o
     // prompt-builder não inclui o texto do lead e a IA responde "no vazio".

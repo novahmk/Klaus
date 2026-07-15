@@ -22,6 +22,14 @@ import {
 	wasenderConfig
 } from './integrations/wasender';
 
+// DEBUG TEMPORÁRIO: investigar unhandledRejection após "ConfigLoader: resumo
+// da carga". O handler em src/infra/health/core.ts já loga via logger, mas
+// perde o stack trace (só faz String(reason)). Remover após diagnóstico.
+process.on('unhandledRejection', (reason: any, promise) => {
+	console.error('[UNHANDLED REJECTION]', reason);
+	console.error('[STACK]', reason?.stack);
+});
+
 attachGlobalHandlers();
 
 const validatorOnly = isValidatorOnlyService();
