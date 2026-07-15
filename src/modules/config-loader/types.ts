@@ -5,24 +5,33 @@
 export interface ConfigPersona {
   nome: string;
   descricao?: string;
-  cargo_alvo?: string;
 }
 
 export interface ConfigObjetivo {
-  descricao: string;
   objetivo_curto?: string;
   objetivo_longo?: string;
 }
 
+/**
+ * Ajustado para bater com o schema real da tabela `cfg_ia_abordagens`
+ * (3 textos livres por etapa, em vez de arrays de tags).
+ */
 export interface ConfigAbordagens {
-  abordagens: string[];
-  evitar: string[];
+  abordagem_inicial?: string;
+  abordagem_objecao?: string;
+  abordagem_fechamento?: string;
 }
 
+/**
+ * Ajustado para bater com o schema real da tabela `cfg_ia_contexto`.
+ * `cargo_alvo` migrou de `ConfigPersona` para cá; `palavras_chave_bloqueadas`
+ * é combinada (deduplicada) com a lista equivalente em `ConfigRegras` na
+ * hora de montar o prompt.
+ */
 export interface ConfigContexto {
-  contexto_empresa?: string;
-  contexto_industria?: string;
-  contexto_mercado?: string;
+  cargo_alvo?: string;
+  palavras_chave_bloqueadas?: string[];
+  base_conhecimento?: string | Record<string, unknown>;
 }
 
 export interface ConfigTomVoz {

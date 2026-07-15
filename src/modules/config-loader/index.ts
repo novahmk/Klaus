@@ -15,6 +15,13 @@ const CACHE_KEY_SCORING = (clienteId: string) => `scoring:${clienteId}`;
 
 /**
  * Carrega configuração completa do dashboard do Supabase.
+ *
+ * Cada uma das 6 tabelas é consultada com `.maybeSingle()` (não lança erro
+ * quando não há linha para o `cliente_id`) e tratada de forma INDEPENDENTE:
+ * se uma tabela falhar (erro de permissão, tabela inexistente, timeout),
+ * as demais que carregaram com sucesso continuam compondo a config. Só
+ * retorna `null` (fallback total, prompt minimalista) se TODAS as 6
+ * falharem.
  */
 async function loadConfigFromSupabase(
   clienteId: string
@@ -29,27 +36,49 @@ async function loadConfigFromSupabase(
     const result = await querySupabaseWithTimeout(async (supabase) => {
       const [persona, objetivo, abordagens, contexto, tom_voz, regras] =
         await Promise.all([
-          supabase.from('cfg_persona').select('*').eq('cliente_id', clienteId).single(),
-          supabase.from('cfg_objetivo').select('*').eq('cliente_id', clienteId).single(),
-          supabase.from('cfg_abordagens').select('*').eq('cliente_id', clienteId).single(),
-          supabase.from('cfg_contexto').select('*').eq('cliente_id', clienteId).single(),
-          supabase.from('cfg_tom_voz').select('*').eq('cliente_id', clienteId).single(),
-          supabase.from('cfg_regras').select('*').eq('cliente_id', clienteId).single()
+          supabase.from('cfg_ia_persona').select('*').eq('cliente_id', clienteId).maybeSingle(),
+          supabase.from('cfg_ia_objetivo').select('*').eq('cliente_id', clienteId).maybeSingle(),
+          supabase.from('cfg_ia_abordagens').select('*').eq('cliente_id', clienteId).maybeSingle(),
+          supabase.from('cfg_ia_contexto').select('*').eq('cliente_id', clienteId).maybeSingle(),
+          supabase.from('cfg_ia_tom_voz').select('*').eq('cliente_id', clienteId).maybeSingle(),
+          supabase.from('cfg_ia_regras').select('*').eq('cliente_id', clienteId).maybeSingle()
         ]);
 
-      // Se alguma query falhou, retorna null (fallback para default)
-      if (
-        persona.error ||
-        objetivo.error ||
-        abordagens.error ||
-        contexto.error ||
-        tom_voz.error ||
-        regras.error
-      ) {
-        logger.warn(
-          { clienteId, erros: [persona.error?.message, objetivo.error?.message] },
-          'ConfigLoader: falha ao carregar config'
-        );
+      const tabelas = [
+        { nome: 'cfg_ia_persona', resultado: persona },
+        { nome: 'cfg_ia_objetivo', resultado: objetivo },
+        { nome: 'cfg_ia_abordagens', resultado: abordagens },
+        { nome: 'cfg_ia_contexto', resultado: contexto },
+        { nome: 'cfg_ia_tom_voz', resultado: tom_voz },
+        { nome: 'cfg_ia_regras', resultado: regras }
+      ];
+
+      let tabelasOk = 0;
+      let tabelasFalha = 0;
+
+      for (const { nome, resultado: r } of tabelas) {
+        if (r.error) {
+          tabelasFalha++;
+          logger.warn(
+            { clienteId, tabela: nome, erro: r.error.message, codigo: r.error.code },
+            'ConfigLoader: falha ao carregar tabela'
+          );
+        } else {
+          tabelasOk++;
+          logger.debug(
+            { clienteId, tabela: nome, campos: r.data ? Object.keys(r.data).length : 0 },
+            'ConfigLoader: tabela carregada com sucesso'
+          );
+        }
+      }
+
+      logger.info(
+        { clienteId, tabelasOk, tabelasFalha, totalTabelas: tabelas.length },
+        'ConfigLoader: resumo da carga'
+      );
+
+      // Todas as tabelas falharam: fallback total (prompt minimalista).
+      if (tabelasOk === 0) {
         return null;
       }
 
@@ -57,7 +86,7 @@ async function loadConfigFromSupabase(
         cliente_id: clienteId,
         persona: persona.data || {},
         objetivo: objetivo.data || {},
-        abordagens: abordagens.data || { abordagens: [], evitar: [] },
+        abordagens: abordagens.data || {},
         contexto: contexto.data || {},
         tom_voz: tom_voz.data || {},
         regras: regras.data || { regras: [], palavras_chave_bloqueadas: [], palavras_chave_obrigatorias: [] },
@@ -119,7 +148,7 @@ async function loadConfigScoringFromSupabase(
   try {
     const result = await querySupabaseWithTimeout(async (supabase) => {
       const { data, error } = await supabase
-        .from('cfg_scoring')
+        .from('config_scoring')
         .select('*')
         .eq('cliente_id', clienteId)
         .single();

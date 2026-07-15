@@ -9,10 +9,39 @@ import { logger } from '../components/shared/logger';
 let supabaseClient: SupabaseClient | null = null;
 let initError: Error | null = null;
 
+interface CredencialResolvida {
+  /** Valor da variável de ambiente (string vazia se nenhuma estiver definida). */
+  valor: string;
+  /** Nome da env var efetivamente usada (null se nenhuma tinha valor). */
+  origem: string | null;
+}
+
+/**
+ * Resolve uma credencial aceitando o nome "legado" (formato JWT, ex.:
+ * SUPABASE_ANON_KEY) e o novo formato de chaves do Supabase (ex.:
+ * SUPABASE_PUBLISHABLE_KEY / SUPABASE_SECRET_KEY, prefixo sb_publishable_/
+ * sb_secret_). O nome legado tem prioridade se ambos estiverem definidos.
+ */
+function resolverCredencial(
+  nomeLegado: string,
+  nomeNovo: string
+): CredencialResolvida {
+  const legado = process.env[nomeLegado] || '';
+  if (legado) return { valor: legado, origem: nomeLegado };
+
+  const novo = process.env[nomeNovo] || '';
+  if (novo) return { valor: novo, origem: nomeNovo };
+
+  return { valor: '', origem: null };
+}
+
 /**
  * Retorna cliente Supabase singleton.
  * Se URL ou KEY não estão configuradas, retorna null (fallback seguro).
  * Se inicialização falhou, retorna null e loga erro.
+ *
+ * Aceita tanto SUPABASE_ANON_KEY (formato JWT legado) quanto
+ * SUPABASE_PUBLISHABLE_KEY (novo formato sb_publishable_...).
  */
 export function getSupabaseClient(): SupabaseClient | null {
   // Já foi inicializado
@@ -22,19 +51,25 @@ export function getSupabaseClient(): SupabaseClient | null {
   if (initError) return null;
 
   const url = process.env.SUPABASE_URL || '';
-  const anonKey = process.env.SUPABASE_ANON_KEY || '';
+  const chave = resolverCredencial('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY');
 
   // Configs não disponíveis
-  if (!url || !anonKey) {
+  if (!url || !chave.valor) {
     logger.warn(
-      { supabaseUrl: !!url, supabaseAnonKey: !!anonKey },
+      {
+        SUPABASE_URL_definida: !!process.env.SUPABASE_URL,
+        SUPABASE_URL_vazia: process.env.SUPABASE_URL !== undefined && !url,
+        SUPABASE_ANON_KEY_definida: !!process.env.SUPABASE_ANON_KEY,
+        SUPABASE_PUBLISHABLE_KEY_definida: !!process.env.SUPABASE_PUBLISHABLE_KEY,
+        variavelKeyEncontrada: chave.origem
+      },
       'Supabase: credenciais não configuradas (SUPABASE_ENABLED deve estar false)'
     );
     return null;
   }
 
   try {
-    supabaseClient = createClient(url, anonKey, {
+    supabaseClient = createClient(url, chave.valor, {
       auth: {
         persistSession: false // Não persiste em browser (ambiente server)
       },
@@ -45,12 +80,20 @@ export function getSupabaseClient(): SupabaseClient | null {
       }
     });
 
-    logger.info('Supabase client inicializado com sucesso');
+    logger.info(
+      { variavelKeyUsada: chave.origem },
+      'Supabase client inicializado com sucesso'
+    );
     return supabaseClient;
   } catch (err) {
     initError = err as Error;
     logger.error(
-      { erro: initError.message },
+      {
+        erro: initError.message,
+        erroNome: initError.name,
+        variavelKeyUsada: chave.origem,
+        urlDefinida: !!url
+      },
       'Supabase client: falha na inicialização'
     );
     return null;
@@ -60,18 +103,30 @@ export function getSupabaseClient(): SupabaseClient | null {
 /**
  * Retorna cliente service-role (se SERVICE_KEY está configurada).
  * Usa permissões elevadas; ideal para operações administrativas.
+ *
+ * Aceita tanto SUPABASE_SERVICE_KEY (formato JWT legado) quanto
+ * SUPABASE_SECRET_KEY (novo formato sb_secret_...).
  */
 export function getSupabaseServiceClient(): SupabaseClient | null {
   const url = process.env.SUPABASE_URL || '';
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY || '';
+  const chave = resolverCredencial('SUPABASE_SERVICE_KEY', 'SUPABASE_SECRET_KEY');
 
-  if (!url || !serviceKey) {
-    logger.warn('Supabase service client: credenciais não configuradas');
+  if (!url || !chave.valor) {
+    logger.warn(
+      {
+        SUPABASE_URL_definida: !!process.env.SUPABASE_URL,
+        SUPABASE_URL_vazia: process.env.SUPABASE_URL !== undefined && !url,
+        SUPABASE_SERVICE_KEY_definida: !!process.env.SUPABASE_SERVICE_KEY,
+        SUPABASE_SECRET_KEY_definida: !!process.env.SUPABASE_SECRET_KEY,
+        variavelKeyEncontrada: chave.origem
+      },
+      'Supabase service client: credenciais não configuradas'
+    );
     return null;
   }
 
   try {
-    return createClient(url, serviceKey, {
+    const client = createClient(url, chave.valor, {
       auth: {
         persistSession: false
       },
@@ -81,9 +136,20 @@ export function getSupabaseServiceClient(): SupabaseClient | null {
         }
       }
     });
+    logger.info(
+      { variavelKeyUsada: chave.origem },
+      'Supabase service client inicializado com sucesso'
+    );
+    return client;
   } catch (err) {
+    const erro = err as Error;
     logger.error(
-      { erro: (err as Error).message },
+      {
+        erro: erro.message,
+        erroNome: erro.name,
+        variavelKeyUsada: chave.origem,
+        urlDefinida: !!url
+      },
       'Supabase service client: falha na inicialização'
     );
     return null;

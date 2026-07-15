@@ -26,12 +26,22 @@ const REGRA_FORMATO =
  */
 export function construirSystemPrompt(config: DashboardConfig | null): string {
   if (!config) {
-    logger.debug('PromptBuilder: config null, retornando prompt minimalista');
-    return `Você é um assistente de vendas profissional. 
+    const promptMinimalista = `Você é um assistente de vendas profissional. 
 Seja consultivo, empático e ofereça valor antes de pedir.
 Sempre pergunte antes de descartar oportunidades.
 
 ${REGRA_FORMATO}`;
+
+    logger.info(
+      {
+        promptDinamicoAtivo: false,
+        tamanhoPrompt: promptMinimalista.length,
+        preview: promptMinimalista.slice(0, 200)
+      },
+      'PromptBuilder: config null, retornando prompt minimalista'
+    );
+
+    return promptMinimalista;
   }
 
   const linhas: string[] = [];
@@ -42,30 +52,38 @@ ${REGRA_FORMATO}`;
     if (config.persona.descricao) {
       linhas.push(`${config.persona.descricao}`);
     }
-    if (config.persona.cargo_alvo) {
-      linhas.push(
-        `Você está conversando com um ${config.persona.cargo_alvo}. Adapte seus argumentos e exemplos para este perfil.`
-      );
-    }
+  }
+
+  // cargo_alvo migrou de persona para contexto (schema real)
+  if (config.contexto?.cargo_alvo) {
+    linhas.push(
+      `Você está conversando com um ${config.contexto.cargo_alvo}. Adapte seus argumentos e exemplos para este perfil.`
+    );
   }
 
   // Objetivo
   if (config.objetivo?.objetivo_curto) {
     linhas.push(`\nObjetivo imediato: ${config.objetivo.objetivo_curto}`);
   }
-  if (config.objetivo?.descricao) {
-    linhas.push(`\nObjetivo: ${config.objetivo.descricao}`);
-  }
+  // Sem coluna "descricao" no schema real: usa objetivo_longo como fallback.
   if (config.objetivo?.objetivo_longo) {
-    linhas.push(`\nContexto completo do objetivo: ${config.objetivo.objetivo_longo}`);
+    linhas.push(`\nObjetivo: ${config.objetivo.objetivo_longo}`);
   }
 
-  // Contexto
-  if (config.contexto?.contexto_empresa) {
-    linhas.push(`\nSomos uma ${config.contexto.contexto_empresa}`);
-  }
-  if (config.contexto?.contexto_industria) {
-    linhas.push(`Atuamos na indústria de ${config.contexto.contexto_industria}`);
+  // Base de conhecimento (contexto) — truncada para não estourar tokens.
+  if (config.contexto?.base_conhecimento) {
+    const texto =
+      typeof config.contexto.base_conhecimento === 'string'
+        ? config.contexto.base_conhecimento
+        : JSON.stringify(config.contexto.base_conhecimento);
+    const truncado = texto.length > 1500 ? `${texto.slice(0, 1500)}...` : texto;
+    if (texto.length > 1500) {
+      logger.debug(
+        { clienteId: config.cliente_id, tamanhoOriginal: texto.length },
+        'PromptBuilder: base_conhecimento truncada'
+      );
+    }
+    linhas.push(`\nBase de conhecimento: ${truncado}`);
   }
 
   // Tom de voz
@@ -87,17 +105,15 @@ ${REGRA_FORMATO}`;
     );
   }
 
-  // Abordagens
-  if (
-    config.abordagens?.abordagens &&
-    config.abordagens.abordagens.length > 0
-  ) {
-    linhas.push(
-      `\nAbordagens recomendadas: ${config.abordagens.abordagens.join(', ')}`
-    );
+  // Abordagens (3 textos fixos por etapa, schema real de cfg_ia_abordagens)
+  if (config.abordagens?.abordagem_inicial) {
+    linhas.push(`\nAbordagem inicial: ${config.abordagens.abordagem_inicial}`);
   }
-  if (config.abordagens?.evitar && config.abordagens.evitar.length > 0) {
-    linhas.push(`\nEvite: ${config.abordagens.evitar.join(', ')}`);
+  if (config.abordagens?.abordagem_objecao) {
+    linhas.push(`Ao lidar com objeções: ${config.abordagens.abordagem_objecao}`);
+  }
+  if (config.abordagens?.abordagem_fechamento) {
+    linhas.push(`Para fechar: ${config.abordagens.abordagem_fechamento}`);
   }
 
   // Regras
@@ -117,20 +133,28 @@ ${REGRA_FORMATO}`;
     );
   }
 
-  if (
-    config.regras?.palavras_chave_bloqueadas &&
-    config.regras.palavras_chave_bloqueadas.length > 0
-  ) {
-    linhas.push(
-      `NUNCA use estas palavras: ${config.regras.palavras_chave_bloqueadas.join(', ')}`
-    );
+  // palavras_chave_bloqueadas existe tanto em `regras` quanto em `contexto`
+  // no schema real — combina as duas listas sem duplicar.
+  const bloqueadas = Array.from(
+    new Set([
+      ...(config.regras?.palavras_chave_bloqueadas ?? []),
+      ...(config.contexto?.palavras_chave_bloqueadas ?? [])
+    ])
+  );
+  if (bloqueadas.length > 0) {
+    linhas.push(`NUNCA use estas palavras: ${bloqueadas.join(', ')}`);
   }
 
   linhas.push(`\n${REGRA_FORMATO}`);
 
   const prompt = linhas.join('\n');
-  logger.debug(
-    { clienteId: config.cliente_id, linhas: linhas.length },
+  logger.info(
+    {
+      clienteId: config.cliente_id,
+      promptDinamicoAtivo: true,
+      tamanhoPrompt: prompt.length,
+      preview: prompt.slice(0, 200)
+    },
     'PromptBuilder: prompt construído'
   );
 
@@ -147,19 +171,28 @@ export function obterSystemPrompt(clienteId?: string): string {
 
   const cached = getGlobalCache().get<string>(cacheKey);
   if (cached) {
-    logger.debug({ clienteId: cliente }, 'PromptBuilder: prompt do cache');
+    logger.debug(
+      { clienteId: cliente, promptDinamicoAtivo: true, tamanhoPrompt: cached.length },
+      'PromptBuilder: prompt do cache'
+    );
     return cached;
   }
 
-  logger.debug(
-    { clienteId: cliente },
-    'PromptBuilder: cache expirado, usando prompt default'
+  const fallback = `Você é um assistente de vendas consultivo e empático. 
+Ofereça valor antes de qualquer pedido. Sempre pergunte antes de descartar oportunidades.
+Seja direto, profissional e focado em resolver o problema do cliente.`;
+
+  logger.warn(
+    {
+      clienteId: cliente,
+      promptDinamicoAtivo: false,
+      tamanhoPrompt: fallback.length
+    },
+    'PromptBuilder: FALLBACK GENÉRICO usado (cache expirado ou nunca populado)'
   );
 
   // Fallback minimalista: não bloqueia a resposta
-  return `Você é um assistente de vendas consultivo e empático. 
-Ofereça valor antes de qualquer pedido. Sempre pergunte antes de descartar oportunidades.
-Seja direto, profissional e focado em resolver o problema do cliente.`;
+  return fallback;
 }
 
 /**
