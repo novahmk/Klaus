@@ -21,6 +21,36 @@ const REGRA_FORMATO =
   'Não use listas ou formatação. Uma única mensagem, sem múltiplos parágrafos.';
 
 /**
+ * Normaliza um valor vindo do Supabase para array de strings.
+ *
+ * Colunas que deveriam ser `text[]` às vezes chegam como `text` simples
+ * (erro de schema/seed), o que quebra `.forEach()`/`.map()`/`.join()` no
+ * restante do arquivo. Este helper garante que sempre teremos um array,
+ * tentando separar por quebra de linha ou vírgula quando o valor vier
+ * como string.
+ */
+function garantirArray(valor: unknown): string[] {
+  if (Array.isArray(valor)) return valor;
+  if (typeof valor === 'string') {
+    if (valor.includes('\n')) {
+      return valor
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    if (valor.includes(',')) {
+      return valor
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return valor.trim() ? [valor.trim()] : [];
+  }
+  if (!valor) return [];
+  return [valor as string];
+}
+
+/**
  * Constrói system prompt a partir de configurações do dashboard.
  * Fallback: se config não disponível, retorna prompt vazio/minimalista.
  */
@@ -116,29 +146,42 @@ ${REGRA_FORMATO}`;
     linhas.push(`Para fechar: ${config.abordagens.abordagem_fechamento}`);
   }
 
-  // Regras
-  if (config.regras?.regras && config.regras.regras.length > 0) {
+  // DEBUG TEMPORÁRIO: confirmar o tipo real vindo do Supabase para os campos
+  // que quebravam com `.forEach is not a function` (coluna `text` em vez de
+  // `text[]`). Remover após diagnóstico.
+  console.log(
+    '[DEBUG PROMPT] regras type:',
+    typeof config.regras?.regras,
+    'isArray:',
+    Array.isArray(config.regras?.regras)
+  );
+  console.log(
+    '[DEBUG PROMPT] regras value:',
+    JSON.stringify(config.regras?.regras)?.substring(0, 200)
+  );
+
+  // Regras — normaliza para array antes de qualquer .forEach()/.map()/.join(),
+  // pois a coluna pode chegar como string simples em vez de text[].
+  const regrasArray = garantirArray(config.regras?.regras);
+  if (regrasArray.length > 0) {
     linhas.push(`\nRegras importantes:`);
-    config.regras.regras.forEach((regra) => {
+    regrasArray.forEach((regra) => {
       linhas.push(`  - ${regra}`);
     });
   }
 
-  if (
-    config.regras?.palavras_chave_obrigatorias &&
-    config.regras.palavras_chave_obrigatorias.length > 0
-  ) {
-    linhas.push(
-      `Sempre mencione: ${config.regras.palavras_chave_obrigatorias.join(', ')}`
-    );
+  const obrigatoriasArray = garantirArray(config.regras?.palavras_chave_obrigatorias);
+  if (obrigatoriasArray.length > 0) {
+    linhas.push(`Sempre mencione: ${obrigatoriasArray.join(', ')}`);
   }
 
   // palavras_chave_bloqueadas existe tanto em `regras` quanto em `contexto`
-  // no schema real — combina as duas listas sem duplicar.
+  // no schema real — combina as duas listas sem duplicar, normalizando
+  // cada uma antes de espalhar no Set.
   const bloqueadas = Array.from(
     new Set([
-      ...(config.regras?.palavras_chave_bloqueadas ?? []),
-      ...(config.contexto?.palavras_chave_bloqueadas ?? [])
+      ...garantirArray(config.regras?.palavras_chave_bloqueadas),
+      ...garantirArray(config.contexto?.palavras_chave_bloqueadas)
     ])
   );
   if (bloqueadas.length > 0) {
