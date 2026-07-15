@@ -26,10 +26,12 @@ function resolverCredencial(
   nomeLegado: string,
   nomeNovo: string
 ): CredencialResolvida {
-  const legado = process.env[nomeLegado] || '';
+  // .trim() remove \n/espaços invisíveis colados junto da chave no painel do Railway,
+  // que fazem o createClient lançar "Invalid header value" na construção.
+  const legado = (process.env[nomeLegado] || '').trim();
   if (legado) return { valor: legado, origem: nomeLegado };
 
-  const novo = process.env[nomeNovo] || '';
+  const novo = (process.env[nomeNovo] || '').trim();
   if (novo) return { valor: novo, origem: nomeNovo };
 
   return { valor: '', origem: null };
@@ -50,7 +52,7 @@ export function getSupabaseClient(): SupabaseClient | null {
   // Houve erro na inicialização anterior
   if (initError) return null;
 
-  const url = process.env.SUPABASE_URL || '';
+  const url = (process.env.SUPABASE_URL || '').trim();
   const chave = resolverCredencial('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEY');
 
   // DEBUG TEMPORÁRIO: valores exatos das variáveis de ambiente (remover após diagnóstico)
@@ -96,6 +98,9 @@ export function getSupabaseClient(): SupabaseClient | null {
     return supabaseClient;
   } catch (err) {
     initError = err as Error;
+    // DEBUG TEMPORÁRIO: expõe a mensagem real do erro no console do Railway
+    console.error('[DEBUG SUPABASE] createClient LANÇOU:', initError.name, '-', initError.message);
+    console.error('[DEBUG SUPABASE] stack:', initError.stack);
     logger.error(
       {
         erro: initError.message,
@@ -117,7 +122,7 @@ export function getSupabaseClient(): SupabaseClient | null {
  * SUPABASE_SECRET_KEY (novo formato sb_secret_...).
  */
 export function getSupabaseServiceClient(): SupabaseClient | null {
-  const url = process.env.SUPABASE_URL || '';
+  const url = (process.env.SUPABASE_URL || '').trim();
   const chave = resolverCredencial('SUPABASE_SERVICE_KEY', 'SUPABASE_SECRET_KEY');
 
   if (!url || !chave.valor) {
